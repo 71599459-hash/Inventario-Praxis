@@ -24,7 +24,8 @@ create table if not exists colaboradores (
 
 create table if not exists equipos (
   id uuid primary key default gen_random_uuid(),
-  codigo_tic text not null unique,
+  -- Puede ser NULL durante la etapa de depuración. Cuando existe, debe ser único.
+  codigo_tic text,
   codigo_padre_tic text,
   equipo text not null,
   descripcion text,
@@ -41,10 +42,17 @@ create table if not exists equipos (
     check (ubicacion_tipo in ('ASIGNADO','ALMACEN','SEDE')),
   observaciones text,
   origen text,
+  origen_fila integer,
+  necesita_revision boolean not null default false,
+  ubicaciones_conflictivas jsonb not null default '[]'::jsonb,
   activo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists equipos_codigo_tic_unique
+  on equipos (upper(codigo_tic))
+  where codigo_tic is not null and btrim(codigo_tic) <> '';
 
 create unique index if not exists equipos_serie_unique
   on equipos (upper(serie))
@@ -73,19 +81,44 @@ create table if not exists importaciones (
   registros_leidos integer not null default 0,
   registros_maestros integer not null default 0,
   codigos_consolidados integer not null default 0,
+  conflictos_ubicacion integer not null default 0,
+  registros_sin_codigo integer not null default 0,
   usuario_id uuid,
+  created_at timestamptz not null default now()
+);
+
+-- Conserva cada aparición del Excel aunque luego varias filas se consoliden
+-- en un único registro maestro de equipos.
+create table if not exists apariciones_excel (
+  id uuid primary key default gen_random_uuid(),
+  importacion_id uuid references importaciones(id) on delete cascade,
+  equipo_id uuid references equipos(id) on delete set null,
+  codigo_tic text,
+  hoja text not null,
+  fila integer,
+  sede_id uuid references sedes(id),
+  area text,
+  responsable_texto text,
+  dni_texto text,
+  estado text,
+  fecha_texto text,
+  observaciones text,
+  datos_origen jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
 create index if not exists equipos_sede_idx on equipos(sede_id);
 create index if not exists equipos_responsable_idx on equipos(responsable_id);
 create index if not exists movimientos_equipo_idx on movimientos(equipo_id, fecha desc);
+create index if not exists apariciones_excel_codigo_idx on apariciones_excel(codigo_tic);
+create index if not exists apariciones_excel_equipo_idx on apariciones_excel(equipo_id);
 
 alter table sedes enable row level security;
 alter table colaboradores enable row level security;
 alter table equipos enable row level security;
 alter table movimientos enable row level security;
 alter table importaciones enable row level security;
+alter table apariciones_excel enable row level security;
 
 -- Las políticas deben definirse según los roles institucionales
 -- (administrador_tic, editor, consulta).

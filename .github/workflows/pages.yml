@@ -5,6 +5,8 @@ name: Publicar Inventario Praxis
 # Después se ejecuta este workflow manualmente.
 
 on:
+  push:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:

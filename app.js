@@ -76,6 +76,7 @@
       networks:["Cámaras y redes","Infraestructura tecnológica y seguridad"],
       materials:["Materiales","Insumos, materiales y herramientas"],
       movements:["Movimientos","Transferencias e historial"],
+      review:["Revisión","Conflictos, códigos faltantes y depuración"],
       reports:["Reportes","Resumen del inventario"]
     };
     $("#pageTitle").textContent = titles[view][0];
@@ -240,6 +241,47 @@
     $("#movementTable").innerHTML=`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Origen</th><th>Código TIC</th><th>Equipo</th><th>Desde</th><th>Hacia</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>${rows||`<tr><td colspan="9">Sin movimientos.</td></tr>`}</tbody></table></div>`;
   }
 
+  function reviewItems() {
+    return activeInventory().filter(r => r.needsReview || !r.codigo);
+  }
+
+  function renderReview() {
+    const q = norm($("#reviewSearch")?.value || "");
+    const all = reviewItems();
+    const items = all.filter(r => {
+      if (!q) return true;
+      return norm([r.codigo,r.id,r.equipo,r.marca,r.modelo,r.serie,r.sede,r.area,r.responsable,r.dni].join(" ")).includes(q);
+    });
+    const conflicts = activeInventory().filter(r=>r.needsReview).length;
+    const noCode = activeInventory().filter(r=>!r.codigo).length;
+    const consolidated = activeInventory().filter(r=>(r.duplicateSources||0)>1).length;
+    $("#reviewSummary").innerHTML = [
+      [all.length,"Pendientes de revisión"],
+      [conflicts,"Ubicaciones conflictivas"],
+      [noCode,"Sin Código TIC"],
+      [consolidated,"Códigos consolidados"]
+    ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
+
+    const rows = items.map(r => {
+      const issues = [
+        r.needsReview ? '<span class="badge warn">UBICACIÓN</span>' : '',
+        !r.codigo ? '<span class="badge bad">SIN CÓDIGO TIC</span>' : ''
+      ].filter(Boolean).join(" ");
+      return `<tr>
+        <td><span class="code">${esc(r.codigo||r.id)}</span></td>
+        <td>${issues}</td>
+        <td><b>${esc(r.equipo||"Sin tipo")}</b><div class="muted">${esc([r.marca,r.modelo].filter(Boolean).join(" / "))}</div></td>
+        <td>${esc(r.sede)}</td>
+        <td>${esc(r.area)}</td>
+        <td>${esc(r.responsable)}</td>
+        <td>${r.duplicateSources>1?`${r.duplicateSources} apariciones`:"1 aparición"}</td>
+        <td><button class="btn btn-soft" data-review="${esc(r.id)}">Revisar</button></td>
+      </tr>`;
+    }).join("");
+    $("#reviewTable").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Código</th><th>Observación</th><th>Equipo</th><th>Sede</th><th>Área</th><th>Responsable</th><th>Origen</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="8">No hay registros pendientes con este filtro.</td></tr>'}</tbody></table></div>`;
+    $("[data-review]").forEach(b=>b.onclick=()=>openAsset(b.dataset.review));
+  }
+
   function reportList(target,obj) {
     $(target).innerHTML=`<div class="report-list">${topEntries(obj,30).map(([k,v])=>`<div class="report-row"><span>${esc(k)}</span><b>${v}</b></div>`).join("")}</div>`;
   }
@@ -256,7 +298,7 @@
       $("#emptyState").classList.remove("hidden");$("#workspace").classList.add("hidden");return;
     }
     $("#emptyState").classList.add("hidden");$("#workspace").classList.remove("hidden");
-    fillFilters();renderDashboard();renderInventory();renderGeneral();renderWarehouse();renderNetworks();renderMaterials();renderSites();renderPeople();renderMovements();renderReports();wireTables();
+    fillFilters();renderDashboard();renderInventory();renderGeneral();renderWarehouse();renderNetworks();renderMaterials();renderSites();renderPeople();renderMovements();renderReview();renderReports();wireTables();
   }
 
   function showModal(title,subtitle,html) {
@@ -460,6 +502,7 @@
     $("#clearLocalBtn").onclick=clearLocalData;
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>$(sel).addEventListener("input",()=>{page=1;renderInventory()}));
     $("#peopleSearch").addEventListener("input",renderPeople);
+    $("#reviewSearch").addEventListener("input",renderReview);
     $("#globalSearch").addEventListener("input",e=>{
       if(!state?.inventory?.length)return;
       $("#inventorySearch").value=e.target.value;page=1;if(e.target.value.trim())setView("inventory");renderInventory();

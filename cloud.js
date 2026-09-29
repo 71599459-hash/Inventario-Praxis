@@ -21,8 +21,15 @@ const PraxisCloud = (() => {
     return data.session;
   }
 
+  function normalizeInstitutionalEmail(value) {
+    const raw=String(value||"").trim().toLowerCase();
+    if(!raw) return "";
+    return raw.includes("@") ? raw : raw+"@praxis.edu.pe";
+  }
+
   async function signIn(email,password) {
     const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
+    email=normalizeInstitutionalEmail(email);
     const {data,error}=await c.auth.signInWithPassword({email,password});
     if(error) throw error;
     await loadProfile();
@@ -30,14 +37,27 @@ const PraxisCloud = (() => {
     return data.session;
   }
 
-  async function signUp(email,password,nombre="") {
+  async function signUp(payload) {
     const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
-    if(!String(email||"").toLowerCase().endsWith("@praxis.edu.pe")) {
-      throw new Error("Utiliza un correo institucional @praxis.edu.pe.");
-    }
+    const email=normalizeInstitutionalEmail(payload?.email);
+    const password=String(payload?.password||"");
+    const nombre=String(payload?.nombre||"").trim();
+    const dni=String(payload?.dni||"").replace(/\D/g,"");
+    const cargo=String(payload?.cargo||"").trim();
+    const sede=String(payload?.sede||"").trim();
+    const area=String(payload?.area||"").trim();
+
+    if(!email.endsWith("@praxis.edu.pe")) throw new Error("Utiliza un correo institucional @praxis.edu.pe.");
+    if(nombre.length<5) throw new Error("Ingresa nombres y apellidos completos.");
+    if(dni.length!==8) throw new Error("El DNI debe tener 8 dígitos.");
+    if(!cargo) throw new Error("Ingresa el cargo.");
+    if(!sede) throw new Error("Selecciona la sede.");
+    if(!area) throw new Error("Ingresa el área.");
+    if(password.length<8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
+
     const {data,error}=await c.auth.signUp({
       email,password,
-      options:{data:{nombre:nombre||String(email).split("@")[0]}}
+      options:{data:{nombre,dni,cargo,sede,area}}
     });
     if(error) throw error;
     return data;
@@ -149,5 +169,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

@@ -381,6 +381,7 @@
   }
 
   function openEditAsset(r) {
+    if(!ensureEditable()) return;
     showModal(`Editar ${r.codigo||r.id}`,"Actualiza la ficha sin crear un segundo registro.",`
       <div id="formAlert"></div>
       <div class="form-grid">
@@ -444,11 +445,12 @@
         from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),
         responsable:r.responsable,observaciones:"Actualización de ficha"
       });
-      await persist();closeModal();renderAll();toast("Ficha actualizada sin duplicar el Código TIC.","success");
+      await persist("EDITAR_FICHA");closeModal();renderAll();toast("Ficha actualizada y sincronizada.","success");
     };
   }
 
   function openResolveConflict(r) {
+    if(!ensureEditable()) return;
     const candidates=(r.conflictRecords&&r.conflictRecords.length?r.conflictRecords:(r.history||[]).filter(h=>h.sede||h.area||h.responsable))
       .filter((x,i,a)=>a.findIndex(y=>norm([y.sede,y.area,y.responsable].join("|"))===norm([x.sede,x.area,x.responsable].join("|")))===i);
 
@@ -482,12 +484,13 @@
       r.needsReview=false;r.conflictLocations=[];r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Resolución de conflicto",codigo:r.codigo,equipo:r.equipo,from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),responsable:r.responsable,observaciones:`Ubicación confirmada desde ${x.source||"Excel"} fila ${x.row||""}`});
-      await persist();closeModal();renderAll();toast("Ubicación confirmada y conflicto resuelto.","success");
+      await persist("RESOLVER_CONFLICTO");closeModal();renderAll();toast("Ubicación confirmada y sincronizada.","success");
     });
     $("#manualConflict").onclick=()=>openMove(r,false);
   }
 
   function openMove(r,toWarehouse=false) {
+    if(!ensureEditable()) return;
     showModal(`Mover ${r.codigo||r.id}`,`Ubicación actual: ${[r.sede,r.area].filter(Boolean).join(" / ")}`,`
       <div id="formAlert"></div>
       <div class="form-grid">
@@ -508,7 +511,7 @@
       r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Movimiento web",codigo:r.codigo,equipo:r.equipo,from:[oldSite,oldArea,oldResp].filter(Boolean).join(" / "),to:[newSite,newArea,newResp].filter(Boolean).join(" / "),responsable:newResp,motivo,observaciones:motivo});
-      await persist();closeModal();renderAll();toast("Movimiento guardado sin duplicar el Código TIC.","success");
+      await persist("MOVIMIENTO_EQUIPO");closeModal();renderAll();toast("Movimiento guardado y sincronizado sin duplicar el Código TIC.","success");
     };
   }
 
@@ -537,6 +540,7 @@
   }
 
   function openAddAsset() {
+    if(!ensureEditable()) return;
     showModal("Agregar equipo","El Código TIC no puede repetirse.",`
       <div id="formAlert"></div>
       <div class="form-grid">
@@ -563,7 +567,7 @@
       if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`))return;
       const r={id:code,codigo:code,codigoPadre:"",equipo:equipment,descripcion:"",marca:norm($("#aBrand").value),modelo:$("#aModel").value.trim(),serie:serial,sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),dni:"",estado:$("#aStatus").value,condicion:"",situacion:"INTERNO",source:"Registro web",observaciones:$("#aObs").value.trim(),duplicateSources:1,needsReview:false,conflictLocations:[],conflictRecords:[],locationType:$("#aPerson").value.trim()?"ASIGNADO":norm($("#aArea").value).includes("ALMAC")?"ALMACEN":"SEDE",history:[{type:"WEB",source:"Registro web",fecha:today(),sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),estado:$("#aStatus").value,observaciones:"Registro creado desde la web"}]};
       state.inventory.unshift(r);state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:code,equipo:equipment,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),observaciones:r.observaciones});
-      await persist();closeModal();renderAll();toast("Equipo registrado.","success");
+      await persist("ALTA_EQUIPO");closeModal();renderAll();toast("Equipo registrado y sincronizado.","success");
     };
   }
 
@@ -586,6 +590,7 @@
   }
 
   async function importExcel(file) {
+    if(!ensureEditable()) return;
     try{
       if(state?.inventory?.length){
         const ok=confirm("Ya existe un inventario cargado en este navegador. La nueva importación reemplazará el estado actual. Se guardará una copia de recuperación automática. ¿Continuar?");
@@ -596,12 +601,13 @@
       const next=await PraxisExcel.fromFile(file);
       if (!next.inventory.length) throw new Error("No se encontraron registros de inventario.");
       next.fileName=file.name;
-      state=next;await persist();page=1;renderAll();setView("dashboard");
+      state=next;await persist("IMPORTAR_EXCEL");page=1;renderAll();setView("dashboard");
       toast(`Inventario importado: ${state.inventory.length} registros maestros.`,"success");
     }catch(err){console.error(err);toast(err.message||"No se pudo importar el Excel.","error")}
   }
 
   async function restoreBackup(file) {
+    if(!ensureEditable()) return;
     try{
       const text=await file.text();
       const restored=JSON.parse(text);
@@ -611,12 +617,13 @@
       state=restored;
       state.webMovements=state.webMovements||[];
       state.transactions=state.transactions||[];
-      await persist();page=1;renderAll();setView("dashboard");
+      await persist("RESTAURAR_BACKUP");page=1;renderAll();setView("dashboard");
       toast("Copia de seguridad restaurada correctamente.","success");
     }catch(err){console.error(err);toast(err.message||"No se pudo restaurar la copia.","error")}
   }
 
   async function clearLocalData() {
+    if(!ensureEditable()) return;
     if(!state?.inventory?.length) return;
     const first=confirm("Esto borrará del navegador el inventario importado y los movimientos locales. El archivo Excel original no será modificado. ¿Continuar?");
     if(!first) return;

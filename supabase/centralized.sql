@@ -8,7 +8,8 @@ begin
   if not exists (select 1 from pg_type where typname = 'praxis_role') then
     create type praxis_role as enum ('ADMIN_TIC','EDITOR','CONSULTA');
   end if;
-end $$;
+end
+$$;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -30,6 +31,17 @@ create table if not exists public.inventory_state (
 
 insert into public.inventory_state(id,state,version)
 values (1,null,0)
+on conflict (id) do nothing;
+
+create table if not exists public.inventory_sync (
+  id integer primary key default 1 check (id = 1),
+  version bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id)
+);
+
+insert into public.inventory_sync(id,version)
+values (1,0)
 on conflict (id) do nothing;
 
 create table if not exists public.audit_events (
@@ -72,7 +84,10 @@ begin
     coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email,'@',1)),
     'CONSULTA'
   )
-  on conflict (id) do nothing;
+  on conflict (id) do update
+    set email=excluded.email,
+        nombre=coalesce(nullif(public.profiles.nombre,''),excluded.nombre),
+        updated_at=now();
   return new;
 end;
 $$;
@@ -87,7 +102,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = public, auth
-as $
+as $$
 declare
   v_email text;
   v_confirmed timestamptz;
@@ -122,7 +137,7 @@ begin
 
   return true;
 end;
-$;
+$$;
 
 create or replace function public.save_inventory_state(
   p_payload jsonb,
@@ -168,6 +183,12 @@ begin
          updated_by = auth.uid()
    where id = 1;
 
+  update public.inventory_sync
+     set version = v_after,
+         updated_at = v_updated,
+         updated_by = auth.uid()
+   where id = 1;
+
   insert into public.audit_events(user_id,action,version_before,version_after,summary)
   values (
     auth.uid(),
@@ -175,7 +196,7 @@ begin
     v_before,
     v_after,
     jsonb_build_object(
-      'masterRecords', coalesce((p_payload->'stats'->>'masterRecords')::int, jsonb_array_length(coalesce(p_payload->'inventory','[]'::jsonb))),
+      'masterRecords', jsonb_array_length(coalesce(p_payload->'inventory','[]'::jsonb)),
       'webMovements', jsonb_array_length(coalesce(p_payload->'webMovements','[]'::jsonb)),
       'fileName', p_payload->>'fileName'
     )
@@ -195,7 +216,17 @@ begin
   if auth.uid() is null or public.current_praxis_role() <> 'ADMIN_TIC' then
     raise exception 'ADMIN_REQUIRED';
   end if;
-  update public.profiles set role=p_role, updated_at=now() where id=p_user;
+
+  if p_user = auth.uid()
+     and p_role <> 'ADMIN_TIC'
+     and (select count(*) from public.profiles where role='ADMIN_TIC' and activo=true) <= 1 then
+    raise exception 'LAST_ADMIN';
+  end if;
+
+  update public.profiles
+     set role=p_role, updated_at=now()
+   where id=p_user;
+
   insert into public.audit_events(user_id,action,summary)
   values(auth.uid(),'CAMBIAR_ROL',jsonb_build_object('target_user',p_user,'new_role',p_role));
 end;
@@ -203,6 +234,7 @@ $$;
 
 alter table public.profiles enable row level security;
 alter table public.inventory_state enable row level security;
+alter table public.inventory_sync enable row level security;
 alter table public.audit_events enable row level security;
 
 drop policy if exists profiles_read_self_or_admin on public.profiles;
@@ -221,34 +253,24 @@ create policy inventory_read_authenticated on public.inventory_state
 for select to authenticated
 using (true);
 
+drop policy if exists inventory_sync_read_authenticated on public.inventory_sync;
+create policy inventory_sync_read_authenticated on public.inventory_sync
+for select to authenticated
+using (true);
+
 drop policy if exists audit_read_admin on public.audit_events;
 create policy audit_read_admin on public.audit_events
 for select to authenticated
 using (public.current_praxis_role() = 'ADMIN_TIC');
 
-
--- Endurecer permisos: las escrituras se realizan únicamente mediante RPC controladas.
 revoke all on function public.bootstrap_first_admin() from public, anon;
 revoke all on function public.save_inventory_state(jsonb,text,bigint) from public, anon;
 revoke all on function public.set_user_role(uuid,praxis_role) from public, anon;
 revoke all on function public.current_praxis_role() from public, anon;
 
--- Activar Realtime para que varios usuarios vean los cambios sin recargar.
-do $
-begin
-  if not exists (
-    select 1
-    from pg_publication_tables
-    where pubname = 'supabase_realtime'
-      and schemaname = 'public'
-      and tablename = 'inventory_state'
-  ) then
-    alter publication supabase_realtime add table public.inventory_state;
-  end if;
-end $;
-
 grant usage on schema public to authenticated;
 grant select on public.inventory_state to authenticated;
+grant select on public.inventory_sync to authenticated;
 grant select on public.profiles to authenticated;
 grant select on public.audit_events to authenticated;
 grant execute on function public.bootstrap_first_admin() to authenticated;
@@ -256,6 +278,22 @@ grant execute on function public.current_praxis_role() to authenticated;
 grant execute on function public.save_inventory_state(jsonb,text,bigint) to authenticated;
 grant execute on function public.set_user_role(uuid,praxis_role) to authenticated;
 
--- Después de crear el primer usuario desde Supabase Auth,
--- promoverlo una sola vez desde SQL Editor:
--- update public.profiles set role='ADMIN_TIC' where email='TU_CORREO@praxis.edu.pe';
+-- Realtime usa una tabla liviana de versión. Al recibir un cambio, el cliente
+-- vuelve a leer inventory_state; así no se envía el JSON completo en el evento.
+do $$
+begin
+  if exists (
+    select 1 from pg_publication_tables
+    where pubname='supabase_realtime' and schemaname='public' and tablename='inventory_state'
+  ) then
+    alter publication supabase_realtime drop table public.inventory_state;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname='supabase_realtime' and schemaname='public' and tablename='inventory_sync'
+  ) then
+    alter publication supabase_realtime add table public.inventory_sync;
+  end if;
+end
+$$;

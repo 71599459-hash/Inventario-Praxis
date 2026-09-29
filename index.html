@@ -19,13 +19,17 @@
       <p>Acceso institucional al inventario centralizado.</p>
       <div id="authMessage" class="auth-message"></div>
       <form id="loginForm" class="auth-form">
+        <label>Nombre
+          <input id="loginName" type="text" autocomplete="name" placeholder="Nombre y apellidos" />
+        </label>
         <label>Correo institucional
           <input id="loginEmail" type="email" autocomplete="username" placeholder="usuario@praxis.edu.pe" required />
         </label>
         <label>Contraseña
-          <input id="loginPassword" type="password" autocomplete="current-password" required />
+          <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
         </label>
         <button class="btn btn-primary" type="submit">Ingresar</button>
+        <button id="signupBtn" class="btn btn-soft" type="button">Crear cuenta institucional</button>
       </form>
       <div class="auth-note">Los datos del inventario se almacenan en una base de datos privada. El repositorio GitHub no contiene los datos reales.</div>
     </div>

@@ -362,22 +362,26 @@
     const history=(r.history||[]).map(h=>`<div class="history-item"><b>${esc(h.source||h.type||"Movimiento")}</b> · ${esc([h.sede,h.area].filter(Boolean).join(" / "))}${h.responsable?` · ${esc(h.responsable)}`:""}<br><small>${esc(h.fecha||"")} ${esc(h.observaciones||"")}</small></div>`).join("");
     const duplicateNotice=r.duplicateSources>1?`<div class="alert info"><b>Código consolidado:</b> este código aparecía ${r.duplicateSources} veces en las hojas activas del Excel. El sistema lo mantiene como un solo registro.</div>`:"";
     const conflictNotice=r.needsReview?`<div class="alert error"><b>Revisar ubicación actual:</b> el mismo Código TIC aparece asociado a más de una sede, área o responsable en el Excel. Verifica el historial antes de confirmar una transferencia.<br><span class="muted">${esc((r.conflictLocations||[]).join(" · "))}</span></div>`:"";
-    showModal(`${r.codigo||r.id} · ${r.equipo||"Equipo"}`,`${r.sede||""} ${r.area?"/ "+r.area:""}`,`
-      ${duplicateNotice}
-      ${conflictNotice}
-      <div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-field"><span>${esc(k)}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
+    const actionButtons = canEdit() ? `
       <div class="modal-actions">
         <button id="editAsset" class="btn btn-soft">Editar ficha</button>
         <button id="moveAsset" class="btn btn-primary">Mover / transferir</button>
         <button id="warehouseAsset" class="btn btn-warning">Enviar al almacén</button>
         ${r.needsReview?'<button id="resolveAsset" class="btn btn-danger">Resolver ubicación</button>':""}
-      </div>
+      </div>` : `<div class="readonly-banner">Modo CONSULTA: puedes ver la ficha y el historial, pero no modificar datos.</div>`;
+    showModal(`${r.codigo||r.id} · ${r.equipo||"Equipo"}`,`${r.sede||""} ${r.area?"/ "+r.area:""}`,`
+      ${duplicateNotice}
+      ${conflictNotice}
+      <div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-field"><span>${esc(k)}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
+      ${actionButtons}
       <h4 class="section-title">Historial del Código TIC</h4>${history||`<div class="muted">Sin historial adicional.</div>`}
     `);
-    $("#editAsset").onclick=()=>openEditAsset(r);
-    $("#moveAsset").onclick=()=>openMove(r,false);
-    $("#warehouseAsset").onclick=()=>openMove(r,true);
-    if (r.needsReview) $("#resolveAsset").onclick=()=>openResolveConflict(r);
+    if (canEdit()) {
+      $("#editAsset").onclick=()=>openEditAsset(r);
+      $("#moveAsset").onclick=()=>openMove(r,false);
+      $("#warehouseAsset").onclick=()=>openMove(r,true);
+      if (r.needsReview) $("#resolveAsset").onclick=()=>openResolveConflict(r);
+    }
   }
 
   function openEditAsset(r) {

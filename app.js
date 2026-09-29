@@ -389,12 +389,45 @@
 
   async function importExcel(file) {
     try{
+      if(state?.inventory?.length){
+        const ok=confirm("Ya existe un inventario cargado en este navegador. La nueva importación reemplazará el estado actual. Se guardará una copia de recuperación automática. ¿Continuar?");
+        if(!ok) return;
+        await PraxisDB.set("praxis-previous-state-v2",state);
+      }
       toast("Procesando Excel…");
       const next=await PraxisExcel.fromFile(file);
       if (!next.inventory.length) throw new Error("No se encontraron registros de inventario.");
+      next.fileName=file.name;
       state=next;await persist();page=1;renderAll();setView("dashboard");
       toast(`Inventario importado: ${state.inventory.length} registros maestros.`,"success");
     }catch(err){console.error(err);toast(err.message||"No se pudo importar el Excel.","error")}
+  }
+
+  async function restoreBackup(file) {
+    try{
+      const text=await file.text();
+      const restored=JSON.parse(text);
+      if(!restored || !Array.isArray(restored.inventory)) throw new Error("El archivo JSON no corresponde a una copia válida del Inventario Praxis.");
+      if(state?.inventory?.length && !confirm("Esta restauración reemplazará el inventario actual del navegador. ¿Continuar?")) return;
+      await PraxisDB.set("praxis-previous-state-v2",state);
+      state=restored;
+      state.webMovements=state.webMovements||[];
+      state.transactions=state.transactions||[];
+      await persist();page=1;renderAll();setView("dashboard");
+      toast("Copia de seguridad restaurada correctamente.","success");
+    }catch(err){console.error(err);toast(err.message||"No se pudo restaurar la copia.","error")}
+  }
+
+  async function clearLocalData() {
+    if(!state?.inventory?.length) return;
+    const first=confirm("Esto borrará del navegador el inventario importado y los movimientos locales. El archivo Excel original no será modificado. ¿Continuar?");
+    if(!first) return;
+    const second=confirm("Confirmación final: ¿borrar los datos locales de Inventario Praxis?");
+    if(!second) return;
+    await PraxisDB.set("praxis-previous-state-v2",state);
+    await PraxisDB.remove(STATE_KEY);
+    state=null;page=1;renderAll();setView("dashboard");
+    toast("Datos locales borrados. Se conservó una copia de recuperación interna.","success");
   }
 
   function demoInfo() {
@@ -422,6 +455,9 @@
     $("#excelInput").onchange=e=>{const f=e.target.files[0];if(f)importExcel(f);e.target.value=""};
     $("#demoInfoBtn").onclick=demoInfo;
     $("#addAssetBtn").onclick=openAddAsset;$("#exportCsvBtn").onclick=exportInventory;$("#backupBtn").onclick=downloadBackup;$("#exportMovementsBtn").onclick=exportMovements;
+    $("#restoreBtn").onclick=()=>$("#restoreInput").click();
+    $("#restoreInput").onchange=e=>{const f=e.target.files[0];if(f)restoreBackup(f);e.target.value=""};
+    $("#clearLocalBtn").onclick=clearLocalData;
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>$(sel).addEventListener("input",()=>{page=1;renderInventory()}));
     $("#peopleSearch").addEventListener("input",renderPeople);
     $("#globalSearch").addEventListener("input",e=>{

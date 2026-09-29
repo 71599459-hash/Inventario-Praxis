@@ -29,6 +29,26 @@ const PraxisCloud = (() => {
     return data.session;
   }
 
+  async function signUp(email,password,nombre="") {
+    const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
+    if(!String(email||"").toLowerCase().endsWith("@praxis.edu.pe")) {
+      throw new Error("Utiliza un correo institucional @praxis.edu.pe.");
+    }
+    const {data,error}=await c.auth.signUp({
+      email,password,
+      options:{data:{nombre:nombre||String(email).split("@")[0]}}
+    });
+    if(error) throw error;
+    return data;
+  }
+
+  async function bootstrapAdmin() {
+    const c=init(); if(!c) return false;
+    const {data,error}=await c.rpc("bootstrap_first_admin");
+    if(error) throw error;
+    return Boolean(data);
+  }
+
   async function signOut() {
     const c=init(); if(!c) return;
     const {error}=await c.auth.signOut();
@@ -121,5 +141,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,signIn,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

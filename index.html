@@ -31,6 +31,7 @@
         <button class="nav-item" data-view="networks"><span>◉</span> Cámaras y redes</button>
         <button class="nav-item" data-view="materials"><span>◫</span> Materiales</button>
         <button class="nav-item" data-view="movements"><span>⇄</span> Movimientos</button>
+        <button class="nav-item" data-view="review"><span>⚠</span> Revisión</button>
         <button class="nav-item" data-view="reports"><span>▥</span> Reportes</button>
       </nav>
 
@@ -199,6 +200,20 @@
                 <button id="exportMovementsBtn" class="btn btn-soft">Exportar movimientos</button>
               </div>
               <div id="movementTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="review">
+            <article class="panel">
+              <div class="panel-head panel-head-row">
+                <div>
+                  <h3>Revisión y depuración</h3>
+                  <p>Confirma la ubicación vigente de Códigos TIC que aparecen en más de un lugar y completa los registros que aún no tienen Código TIC.</p>
+                </div>
+                <div class="search-control compact"><span>⌕</span><input id="reviewSearch" placeholder="Código, equipo, sede, área o responsable"></div>
+              </div>
+              <div id="reviewSummary" class="quality-grid"></div>
+              <div id="reviewTable" style="margin-top:14px"></div>
             </article>
           </section>
 

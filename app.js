@@ -73,9 +73,9 @@
     const p = currentProfile || PraxisCloud.getProfile();
     if ($("#profileName")) $("#profileName").textContent = (p && (p.nombre || p.email)) || "Usuario";
     if ($("#profileRole")) $("#profileRole").textContent = ((p && p.role) || "LOCAL").replace("_"," ");
-    $(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
-    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
-    $(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
+    $$(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
+    $$(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
+    $$(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 
   function groupCount(arr, getter) {
@@ -108,7 +108,7 @@
   function setView(view) {
     currentView = view;
     $$(".view").forEach(v => v.classList.toggle("active", v.dataset.viewPanel === view));
-    $$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    $$$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     const titles = {
       dashboard:["Inventario TIC","Gestión de equipos tecnológicos"],
       inventory:["Inventario maestro","Búsqueda, edición y control del Código TIC"],
@@ -324,7 +324,7 @@
       </tr>`;
     }).join("");
     $("#reviewTable").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Código</th><th>Observación</th><th>Equipo</th><th>Sede</th><th>Área</th><th>Responsable</th><th>Origen</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="8">No hay registros pendientes con este filtro.</td></tr>'}</tbody></table></div>`;
-    $("[data-review]").forEach(b=>b.onclick=()=>openAsset(b.dataset.review));
+    $$("[data-review]").forEach(b=>b.onclick=()=>openAsset(b.dataset.review));
   }
 
   function reportList(target,obj) {
@@ -475,7 +475,7 @@
       <div class="modal-actions"><button id="manualConflict" class="btn btn-primary">Definir ubicación manualmente</button></div>
     `);
 
-    $("[data-pick-conflict]").forEach(b=>b.onclick=async()=>{
+    $$("[data-pick-conflict]").forEach(b=>b.onclick=async()=>{
       const x=candidates[Number(b.dataset.pickConflict)];
       const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
       r.history=r.history||[];
@@ -652,7 +652,7 @@
           "</select></td><td><span class='badge "+(u.activo?"ok":"bad")+"'>"+(u.activo?"ACTIVO":"INACTIVO")+"</span></td></tr>";
       }).join("");
       $("#usersTable").innerHTML="<div class='table-wrap'><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead><tbody>"+(rows||"<tr><td colspan='4'>Sin usuarios.</td></tr>")+"</tbody></table></div>";
-      $("[data-role-user]").forEach(function(sel){
+      $$("[data-role-user]").forEach(function(sel){
         sel.onchange=async function(){
           const role=sel.value;
           if(!confirm("¿Cambiar el rol a "+role+"?")){ await renderUsers(); return; }
@@ -745,8 +745,8 @@
   async function init() {
     cloudMode=PraxisCloud.configured();
 
-    $(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
-    $("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
+    $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+    $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
     $("#modalClose").onclick=closeModal;
     $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});

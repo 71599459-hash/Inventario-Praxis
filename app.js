@@ -666,8 +666,6 @@
     const fingerprint=cargoFingerprint(snap);
     const currentDate=today();
 
-    // Reimpresión segura: si hoy ya se generó exactamente el mismo cargo,
-    // reutiliza el mismo código FTEC en lugar de crear otro.
     let doc=[...state.cargoDocuments].reverse().find(d=>
       d.personKey===key &&
       d.initialDate===currentDate &&
@@ -686,6 +684,8 @@
         situacion:"INTERNO",
         initialDate:currentDate,
         finalDate:"",
+        initialObservation:"",
+        finalObservation:"",
         itemFingerprint:fingerprint,
         items:snap,
         createdBy:currentProfile?.id||"",
@@ -696,78 +696,142 @@
       await persist("IMPRIMIR_CARGO");
     }
 
-    const technician=(currentProfile?.nombre||"CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO").toUpperCase();
+    // La plantilla oficial tiene 25 filas de hardware. Si existen más componentes,
+    // se mantienen todos y se reduce proporcionalmente la altura para conservar una sola hoja.
     const items=doc.items||[];
-    const pageSize=25;
-    const pages=[];
-    for(let i=0;i<Math.max(1,Math.ceil(items.length/pageSize));i++){
-      pages.push(items.slice(i*pageSize,(i+1)*pageSize));
+    const slotCount=Math.max(25,items.length);
+    const hardwareRows=[];
+    for(let i=0;i<slotCount;i++){
+      const r=items[i];
+      if(r){
+        const brandModel=[r.marca,r.modelo].filter(Boolean).join(" / ");
+        const codeSerie=[r.codigo,r.serie].filter(Boolean).join(" / ");
+        hardwareRows.push(`<tr>
+          <td class="num">${i+1}</td>
+          <td class="num">${esc(r.cantidad||"1")}</td>
+          <td>${esc(r.equipo)}</td>
+          <td>${esc(cargoItemType(r))}</td>
+          <td>${esc(brandModel)}</td>
+          <td>${esc(r.caracteristicas)}</td>
+          <td>${esc(codeSerie||"SIN CÓDIGO")}</td>
+          <td>${esc(r.estado)}</td>
+          <td class="nowrap">${esc(cargoDate(doc.initialDate))}</td>
+          <td></td>
+          <td></td>
+          <td>${esc(r.observaciones)}</td>
+        </tr>`);
+      }else{
+        hardwareRows.push(`<tr>
+          <td class="num">${i+1}</td><td></td><td></td><td></td><td></td><td></td>
+          <td></td><td></td><td></td><td></td><td></td><td></td>
+        </tr>`);
+      }
     }
 
+    const technician="CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO";
+    const chief=TIC_HEAD_NAME;
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
-    const pageHtml=pages.map((pageItems,pageIndex)=>{
-      const globalStart=pageIndex*pageSize;
-      const rows=[];
 
-      for(let i=0;i<pageSize;i++){
-        const r=pageItems[i];
-        if(r){
-          const brandModel=[r.marca,r.modelo].filter(Boolean).join(" / ");
-          const codeSerie=[r.codigo,r.serie].filter(Boolean).join(" / ");
-          rows.push(`<tr>
-            <td class="num">${globalStart+i+1}</td>
-            <td class="num">${esc(r.cantidad||"1")}</td>
-            <td>${esc(r.equipo)}</td>
-            <td>${esc(cargoItemType(r))}</td>
-            <td>${esc(brandModel)}</td>
-            <td>${esc(r.caracteristicas)}</td>
-            <td>${esc(codeSerie||"SIN CÓDIGO")}</td>
-            <td>${esc(r.estado)}</td>
-            <td class="nowrap">${esc(cargoDate(doc.initialDate))}</td>
-            <td class="sign-row"></td>
-            <td class="sign-row"></td>
-            <td>${esc(r.observaciones)}</td>
-          </tr>`);
-        }else{
-          rows.push(`<tr>
-            <td class="num">${globalStart+i+1}</td><td></td><td></td><td></td><td></td><td></td>
-            <td></td><td></td><td></td><td class="sign-row"></td><td class="sign-row"></td><td></td>
-          </tr>`);
-        }
-      }
+    const software=[
+      ["1","Windows","10","22H2","6","Edge","","","11","","",""],
+      ["2","Ms Office Professional Plus","2021","","7","Chrome","","","12","","",""],
+      ["3","Winrar","2021","","8","Firefox","","","13","","",""],
+      ["4","VLC","","","9","Adobe Acrobat","2021","","14","","",""],
+      ["5","Aimp3","","","10","Anydesk","","","15","","",""]
+    ].map(r=>`<tr>${r.map((v,i)=>`<td class="${[0,4,8].includes(i)?"num":""}">${esc(v)}</td>`).join("")}</tr>`).join("");
 
-      const isLast=pageIndex===pages.length-1;
-      const reviews=isLast?`
-        ${cargoSoftwareHtml()}
-        <div class="revision-grid">
-          ${revisionBox("REVISIÓN INICIAL",doc.initialDate,technician,TIC_HEAD_NAME,"")}
-          ${revisionBox("REVISIÓN FINAL","",technician,TIC_HEAD_NAME,"")}
-        </div>`:"";
+    const reviewInitial=`
+      <div class="review-box review-left">
+        <div class="review-title">REVISIÓN INICIAL</div>
+        <div class="review-date left-date"><b>FECHA</b><span>${esc(cargoDate(doc.initialDate))}</span></div>
+        <div class="review-note-free">${esc(doc.initialObservation||"")}</div>
+        <div class="review-label">OBSERVACIONES</div>
+        <div class="review-write"></div>
+        <div class="review-sign-labels"><b>FIRMA DEL USUARIO</b><b>FIRMA DEL TÉCNICO</b></div>
+        <div class="review-sign-space"><span></span><span></span></div>
+        <div class="review-names"><span>${esc(technician)}</span><span>${esc(chief)}</span></div>
+        <div class="review-footer"><b>FIRMA DEL RESPONSABLE DE INF. TEC.</b><b>FIRMA DEL JEFE DE TIC</b></div>
+      </div>`;
 
-      return `<section class="print-page">
-        <div class="doc-title">FICHA TÉCNICA DE EQUIPO DE CÓMPUTO</div>
-        <div class="doc-meta">
-          <div><b>Código:</b><span>${esc(doc.code)}</span></div>
-          <div><b>Situación:</b><span>${esc(doc.situacion||"INTERNO")}</span></div>
-          <div class="meta-tech"><b>Técnico:</b><span>${esc(technician)}</span></div>
-          <div><b>Sede:</b><span>${esc(doc.sede||"")}</span></div>
-          <div><b>Área:</b><span>${esc(doc.area||"")}</span></div>
-          <div class="meta-user"><b>Usuario:</b><span>${esc(doc.personName)}${doc.dni?" · DNI: "+esc(doc.dni):""}</span><img src="${logo}"></div>
+    const reviewFinal=`
+      <div class="review-box review-right">
+        <div class="review-title">REVISIÓN FINAL</div>
+        <div class="review-date right-date"><b>FECHA</b><span></span></div>
+        <div class="review-note-free"></div>
+        <div class="review-label">OBSERVACIONES</div>
+        <div class="review-write"></div>
+        <div class="review-sign-labels"><b>FIRMA DEL USUARIO</b><b>FIRMA DEL TÉCNICO</b></div>
+        <div class="review-sign-space"><span></span><span></span></div>
+        <div class="review-names"><span>${esc(technician)}</span><span>${esc(chief)}</span></div>
+        <div class="review-footer"><b>FIRMA DEL RESPONSABLE DE INF. TEC.</b><b>FIRMA DEL JEFE DE TIC</b></div>
+      </div>`;
+
+    const html=`
+      <main class="excel-page">
+        <div class="template-title">FICHA TÉCNICA DE EQUIPO DE CÓMPUTO</div>
+
+        <div class="meta-wrap">
+          <table class="meta-table">
+            <colgroup>
+              <col class="cB"><col class="cC"><col class="cD"><col class="cE"><col class="cF">
+              <col class="cG"><col class="cH"><col class="cI"><col class="cJ"><col class="cK">
+              <col class="cL"><col class="cM"><col class="cN"><col class="cO"><col class="cP">
+            </colgroup>
+            <tbody>
+              <tr>
+                <th colspan="2">Código:</th><td colspan="2">${esc(doc.code)}</td>
+                <th>Situación</th><td colspan="3">${esc(doc.situacion||"INTERNO")}</td>
+                <th>Técnico:</th><td colspan="5">${esc(technician)}</td>
+                <td class="logo-cell" rowspan="2"><img src="${logo}" alt="Praxis"></td>
+              </tr>
+              <tr>
+                <th colspan="2">Sede:</th><td colspan="2">${esc(doc.sede||"")}</td>
+                <th>Área:</th><td colspan="3">${esc(doc.area||"")}</td>
+                <th>Usuario:</th><td colspan="5">${esc(doc.personName)}${doc.dni?" - DNI: "+esc(doc.dni):""}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <div class="section-label">HARDWARE</div>
+        <div class="section-bar">HARDWARE</div>
         <table class="hardware-table">
-          <thead><tr>
-            <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
-            <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma (R.C.)</th><th>Firma TIC</th><th>Observación</th>
-          </tr></thead>
-          <tbody>${rows.join("")}</tbody>
+          <colgroup>
+            <col style="width:2.542%"><col style="width:2.126%"><col style="width:10.374%"><col style="width:5.498%">
+            <col style="width:10.685%"><col style="width:19.294%"><col style="width:13.693%"><col style="width:7.208%">
+            <col style="width:5.705%"><col style="width:5.084%"><col style="width:4.461%"><col style="width:13.330%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
+              <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma (R.C.)</th><th>Firma TIC</th><th>Observación</th>
+            </tr>
+          </thead>
+          <tbody>${hardwareRows.join("")}</tbody>
         </table>
 
-        ${reviews}
-        <div class="page-counter">Página ${pageIndex+1} de ${pages.length} · CARGO DE EQUIPOS TIC</div>
-      </section>`;
-    }).join("");
+        <div class="section-bar software-bar">SOFTWARE</div>
+        <table class="software-table">
+          <colgroup>
+            <col style="width:2.542%"><col style="width:12.500%"><col style="width:5.498%"><col style="width:10.685%">
+            <col style="width:2.437%"><col style="width:11.308%"><col style="width:5.550%"><col style="width:13.693%">
+            <col style="width:2.437%"><col style="width:9.855%"><col style="width:5.084%"><col style="width:17.912%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Ítem</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
+              <th>Ítem</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
+              <th>Ítem</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
+            </tr>
+          </thead>
+          <tbody>${software}</tbody>
+        </table>
+
+        <div class="reviews-layout">
+          ${reviewInitial}
+          <div class="review-gap"></div>
+          ${reviewFinal}
+        </div>
+      </main>`;
 
     const w=window.open("","_blank");
     if(!w){
@@ -775,68 +839,160 @@
       return;
     }
 
+    const dynamicRowMm=slotCount>25 ? Math.max(2.15,86.3/slotCount) : 3.45;
+    const dynamicFontPt=slotCount>25 ? Math.max(3.7,5.0*(25/slotCount)) : 5.0;
+
     w.document.write(`<!doctype html><html><head><meta charset="utf-8">
       <title>${esc(doc.code)} - ${esc(doc.personName)}</title>
       <style>
-        @page{size:A4 landscape;margin:3mm}
+        @page{size:A4 landscape;margin:0}
         *{box-sizing:border-box}
-        html,body{margin:0;padding:0}
-        body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}
-        .print-page{width:100%;page-break-after:always;break-after:page;position:relative}
-        .print-page:last-child{page-break-after:auto;break-after:auto}
+        html,body{margin:0;padding:0;width:297mm;height:210mm;background:#fff;color:#000}
+        body{font-family:Calibri,Arial,Helvetica,sans-serif;overflow:hidden}
+        .excel-page{
+          width:287mm;
+          height:195mm;
+          margin:10mm 5mm 5mm 5mm;
+          overflow:hidden;
+          page-break-after:avoid;
+          break-after:avoid;
+        }
 
-        .doc-title{height:7mm;display:grid;place-items:center;border:1px solid #222;font-weight:800;font-size:9pt;padding:1px}
-        .doc-meta{display:grid;grid-template-columns:1fr 1fr 2.1fr;border-left:1px solid #222;border-top:1px solid #222;font-size:6pt}
-        .doc-meta>div{display:flex;min-height:5mm;border-right:1px solid #222;border-bottom:1px solid #222;align-items:center}
-        .doc-meta b{width:49px;text-align:right;padding-right:3px}
-        .doc-meta span{flex:1;padding:1px 3px;font-weight:600}
-        .meta-user{position:relative;padding-right:73px}
-        .meta-user img{position:absolute;right:4px;top:1px;height:9mm;width:66px;object-fit:contain}
+        table{border-collapse:collapse;border-spacing:0;width:100%;table-layout:fixed}
+        th,td{border:.18mm solid #000;padding:.25mm .45mm;vertical-align:middle;line-height:1.03}
+        th{font-weight:700}
 
-        .section-label{font-size:6pt;font-weight:800;line-height:3.2mm}
-        table{width:100%;border-collapse:collapse;table-layout:fixed}
-        th,td{border:1px solid #222;padding:.6px 1.5px;vertical-align:middle;overflow-wrap:anywhere;line-height:1.05}
-        th{font-size:5.3pt;background:#eee;text-align:center;font-weight:800}
-        .hardware-table td{font-size:5.15pt;height:3.75mm}
-        .hardware-table th{height:4.2mm}
-        .hardware-table th:nth-child(1){width:3%}.hardware-table th:nth-child(2){width:3%}
-        .hardware-table th:nth-child(3){width:8%}.hardware-table th:nth-child(4){width:7%}
-        .hardware-table th:nth-child(5){width:11%}.hardware-table th:nth-child(6){width:18%}
-        .hardware-table th:nth-child(7){width:13%}.hardware-table th:nth-child(8){width:7%}
-        .hardware-table th:nth-child(9){width:7%}.hardware-table th:nth-child(10){width:8%}
-        .hardware-table th:nth-child(11){width:6%}.hardware-table th:nth-child(12){width:9%}
-        .num{text-align:center}.nowrap{white-space:nowrap}.sign-row{height:3.75mm}
+        .template-title{
+          height:5.65mm;
+          border:.18mm solid #000;
+          background:#d9d9d9;
+          display:flex;align-items:center;justify-content:center;
+          font-size:8.6pt;font-weight:700;
+          margin:0 0 3.45mm 0;
+        }
 
-        .software-table th{font-size:5pt;height:3.5mm}
-        .software-table td{font-size:4.9pt;height:3.25mm}
-        .software-table th:nth-child(4n+1){width:3%}
-        .software-table th:nth-child(4n+2){width:9%}
-        .software-table th:nth-child(4n+3){width:9%}
-        .software-table th:nth-child(4n+4){width:12%}
+        .meta-wrap{position:relative;height:7.05mm;margin-bottom:3.65mm}
+        .meta-table{height:7.05mm;font-size:5.2pt}
+        .meta-table tr{height:3.525mm}
+        .meta-table th{background:#d9d9d9;text-align:right;padding-right:.7mm;white-space:nowrap}
+        .meta-table td{background:#fff;text-align:left;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:clip}
+        .meta-table .logo-cell{border:0;background:#fff;text-align:center;padding:0;vertical-align:middle}
+        .meta-table .logo-cell img{max-width:31mm;max-height:11.5mm;object-fit:contain}
 
-        .revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:2mm;break-inside:avoid}
-        .revision-box{border:1px solid #222;font-size:5.2pt;break-inside:avoid}
-        .revision-title{text-align:center;font-weight:800;background:#eee;border-bottom:1px solid #222;padding:1px;line-height:3.2mm}
-        .revision-date{display:grid;grid-template-columns:40% 60%;border-bottom:1px solid #222;min-height:4mm;align-items:center;text-align:center}
-        .revision-date b{border-right:1px solid #222;height:100%;display:grid;place-items:center}
-        .revision-observation{min-height:8mm;border-bottom:1px solid #222;text-align:center;display:grid;grid-template-rows:3.2mm 1fr}
-        .revision-observation b{background:#eee;border-bottom:1px solid #222}
-        .revision-observation span{padding:1px}
-        .revision-signatures{display:grid;grid-template-columns:1fr 1fr}
-        .signature-cell{text-align:center;border-right:1px solid #222}.signature-cell:last-child{border-right:0}
-        .signature-space{height:7mm;border-bottom:1px solid #222}
-        .signature-cell b{display:block;padding:1px}
-        .revision-names{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #222}
-        .revision-names>div{text-align:center;border-right:1px solid #222}.revision-names>div:last-child{border-right:0}
-        .revision-names span{display:block;min-height:3.6mm;padding:1px;border-bottom:1px solid #222}
-        .revision-names b{display:block;padding:1px}
-        .page-counter{text-align:right;font-size:4.8pt;margin-top:1mm;color:#555}
+        .cB{width:2.542%}.cC{width:2.126%}.cD{width:10.374%}.cE{width:5.498%}.cF{width:10.685%}
+        .cG{width:2.437%}.cH{width:11.308%}.cI{width:5.550%}.cJ{width:13.693%}.cK{width:2.437%}
+        .cL{width:4.772%}.cM{width:5.705%}.cN{width:5.084%}.cO{width:4.461%}.cP{width:13.330%}
+
+        .section-bar{
+          height:4.13mm;
+          border:.18mm solid #000;
+          background:#d9d9d9;
+          display:flex;align-items:center;
+          font-size:5.7pt;font-weight:700;
+          padding-left:.35mm;
+        }
+
+        .hardware-table thead tr{height:3.45mm}
+        .hardware-table th{
+          background:#d9d9d9;
+          text-align:center;
+          font-size:4.75pt;
+          padding:.15mm .25mm;
+        }
+        .hardware-table tbody tr{height:${dynamicRowMm}mm}
+        .hardware-table td{
+          font-size:${dynamicFontPt}pt;
+          padding:.12mm .35mm;
+          overflow:hidden;
+          white-space:normal;
+        }
+        .hardware-table td.num{text-align:center;font-weight:600}
+        .hardware-table td:nth-child(8),
+        .hardware-table td:nth-child(9){text-align:center}
+        .hardware-table td:nth-child(10),
+        .hardware-table td:nth-child(11){padding:0}
+        .nowrap{white-space:nowrap}
+
+        .software-bar{height:3.35mm;margin-top:1.55mm}
+        .software-table thead tr{height:3.35mm}
+        .software-table tbody tr{height:3.35mm}
+        .software-table th{
+          background:#d9d9d9;
+          font-size:4.7pt;
+          text-align:center;
+          padding:.1mm .25mm;
+        }
+        .software-table td{
+          font-size:4.65pt;
+          padding:.1mm .35mm;
+          overflow:hidden;
+          white-space:nowrap;
+        }
+        .software-table td.num{text-align:center;font-weight:600}
+
+        .reviews-layout{
+          display:grid;
+          grid-template-columns:44.969% 19.243% 35.788%;
+          height:45.15mm;
+          margin-top:4.0mm;
+          align-items:start;
+        }
+        .review-gap{height:100%}
+        .review-box{border:.18mm solid #000;font-size:4.85pt}
+        .review-title{
+          height:3.45mm;background:#d9d9d9;border-bottom:.18mm solid #000;
+          display:flex;align-items:center;justify-content:center;font-weight:700;
+        }
+        .review-date{height:3.45mm;display:grid;border-bottom:.18mm solid #000;text-align:center}
+        .left-date{grid-template-columns:45.68% 54.32%}
+        .right-date{grid-template-columns:50.29% 49.71%}
+        .review-date b{background:#d9d9d9;border-right:.18mm solid #000;display:flex;align-items:center;justify-content:center}
+        .review-date span{display:flex;align-items:center;justify-content:center}
+        .review-note-free{
+          height:7.34mm;
+          display:flex;align-items:center;
+          padding:.3mm;
+          border-bottom:.18mm solid #000;
+          font-size:4.8pt;
+        }
+        .review-label{
+          height:3.45mm;background:#d9d9d9;border-bottom:.18mm solid #000;
+          display:flex;align-items:center;justify-content:center;font-weight:700;
+        }
+        .review-write{height:9.18mm;border-bottom:.18mm solid #000}
+        .review-sign-labels{
+          height:3.45mm;background:#d9d9d9;border-bottom:.18mm solid #000;
+          display:grid;grid-template-columns:1fr 1fr;text-align:center
+        }
+        .review-sign-labels b{display:flex;align-items:center;justify-content:center}
+        .review-sign-labels b:first-child{border-right:.18mm solid #000}
+        .review-sign-space{
+          height:9.18mm;
+          display:grid;grid-template-columns:1fr 1fr;
+          border-bottom:.18mm solid #000;
+        }
+        .review-sign-space span:first-child{border-right:.18mm solid #000}
+        .review-names{
+          height:3.58mm;background:#d9d9d9;
+          display:grid;grid-template-columns:1fr 1fr;text-align:center;
+          border-bottom:.18mm solid #000;
+        }
+        .review-names span{display:flex;align-items:center;justify-content:center;padding:0 .4mm;font-size:4.25pt;white-space:nowrap;overflow:hidden}
+        .review-names span:first-child{border-right:.18mm solid #000}
+        .review-footer{
+          height:3.45mm;background:#d9d9d9;
+          display:grid;grid-template-columns:1fr 1fr;text-align:center;
+        }
+        .review-footer b{display:flex;align-items:center;justify-content:center;font-size:4.2pt}
+        .review-footer b:first-child{border-right:.18mm solid #000}
 
         @media print{
+          html,body{width:297mm;height:210mm}
           body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+          .excel-page{page-break-inside:avoid;break-inside:avoid}
         }
       </style>
-    </head><body>${pageHtml}
+    </head><body>${html}
       <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
     </body></html>`);
     w.document.close();

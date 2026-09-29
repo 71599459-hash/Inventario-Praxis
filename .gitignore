@@ -1,0 +1,10 @@
+# Datos reales: nunca versionar
+*.xlsx
+*.xls
+*.csv
+data/
+backups/
+exports/
+.env
+.env.*
+.DS_Store

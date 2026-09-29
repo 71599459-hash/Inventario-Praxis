@@ -184,6 +184,26 @@ create policy audit_read_admin on public.audit_events
 for select to authenticated
 using (public.current_praxis_role() = 'ADMIN_TIC');
 
+
+-- Endurecer permisos: las escrituras se realizan únicamente mediante RPC controladas.
+revoke all on function public.save_inventory_state(jsonb,text,bigint) from public, anon;
+revoke all on function public.set_user_role(uuid,praxis_role) from public, anon;
+revoke all on function public.current_praxis_role() from public, anon;
+
+-- Activar Realtime para que varios usuarios vean los cambios sin recargar.
+do $
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'inventory_state'
+  ) then
+    alter publication supabase_realtime add table public.inventory_state;
+  end if;
+end $;
+
 grant usage on schema public to authenticated;
 grant select on public.inventory_state to authenticated;
 grant select on public.profiles to authenticated;

@@ -63,3 +63,11 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .profile small{display:block;font-size:9px;color:var(--muted);font-weight:700}
 .readonly-banner{background:#fff6d9;border:1px solid #f3d678;color:#745100;border-radius:9px;padding:9px 11px;margin-bottom:12px;font-size:11px}
 .sync-indicator{font-size:10px;color:var(--muted)}
+
+.sidebar-account{margin:8px 10px 10px;padding:11px;border:1px solid rgba(255,255,255,.12);border-radius:11px;background:rgba(255,255,255,.06)}
+.sidebar-account-head{display:flex;align-items:center;gap:9px;color:#fff}.sidebar-account-head b{display:block;font-size:11px;max-width:145px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sidebar-account-head small{display:block;font-size:9px;color:#b8cde2;margin-top:2px}
+.sidebar-logout{width:100%;margin-top:10px;border:1px solid rgba(255,255,255,.20);background:rgba(255,255,255,.07);color:#fff;border-radius:8px;padding:8px 10px;font-weight:800;font-size:10px}.sidebar-logout:hover{background:#b52e42;border-color:#b52e42}
+.users-filters{grid-template-columns:1.4fr .55fr .55fr}.authorized-table select{min-width:145px;border:1px solid #cbd8e5;border-radius:8px;padding:7px;background:#fff}
+.user-name-cell{display:flex;align-items:center;gap:9px}.avatar.mini{width:29px;height:29px;font-size:9px;flex:0 0 29px}.you-tag{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:999px;background:#e7f2ff;color:#1467c8;font-size:8px;font-weight:800;vertical-align:middle}
+.btn-small{padding:6px 9px;font-size:9px}.btn-success{background:#0d925d;color:#fff;border-color:#0d925d}.btn-success:hover{background:#087d4e}
+.role-select:disabled{opacity:.65;background:#f2f5f8}

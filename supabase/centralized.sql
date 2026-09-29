@@ -399,6 +399,60 @@ for select to authenticated
 using ((select public.current_praxis_role()) = 'ADMIN_TIC');
 
 
+
+-- Seguridad del primer Administrador TIC:
+-- una cuenta nueva NO se convierte en administradora solo por pertenecer al dominio.
+create table if not exists public.bootstrap_admin_allowlist (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.bootstrap_admin_allowlist enable row level security;
+revoke all on public.bootstrap_admin_allowlist from anon, authenticated;
+
+create or replace function public.bootstrap_first_admin()
+returns boolean
+language plpgsql
+security definer
+set search_path = public, auth
+as $
+declare
+  v_email text;
+  v_confirmed timestamptz;
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  select lower(email), email_confirmed_at
+    into v_email, v_confirmed
+  from auth.users
+  where id = auth.uid();
+
+  if v_email is null or v_email not like '%@praxis.edu.pe' or v_confirmed is null then
+    return false;
+  end if;
+
+  if not exists (
+    select 1 from public.bootstrap_admin_allowlist where lower(email)=v_email
+  ) then
+    return false;
+  end if;
+
+  if exists(select 1 from public.profiles where role='ADMIN_TIC' and activo=true) then
+    return false;
+  end if;
+
+  update public.profiles
+     set role='ADMIN_TIC', activo=true, updated_at=now()
+   where id=auth.uid();
+
+  delete from public.bootstrap_admin_allowlist where lower(email)=v_email;
+
+  insert into public.audit_events(user_id,action,summary)
+  values(auth.uid(),'BOOTSTRAP_ADMIN',jsonb_build_object('email',v_email));
+
+  return true;
+end;
+$;
+
 -- Realtime usa una tabla liviana de versión. Al recibir un cambio, el cliente
 -- vuelve a leer inventory_state; así no se envía el JSON completo en el evento.
 do $$

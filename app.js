@@ -1056,7 +1056,7 @@
   async function init() {
     cloudMode=PraxisCloud.configured();
 
-    $(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+    $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
     $("#modalClose").onclick=closeModal;

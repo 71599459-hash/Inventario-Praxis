@@ -120,7 +120,7 @@
     const q = [
       [inv.length,"Registros maestros"],
       [state.stats?.duplicateCodes||0,"Códigos consolidados"],
-      [state.stats?.conflictCodes||inv.filter(r=>r.needsReview).length,"Ubicación por revisar"],
+      [inv.filter(r=>r.needsReview).length,"Ubicación por revisar"],
       [inv.filter(r=>r.serie).length,"Con serie/código"],
       [state.transactions?.length||0,"Registros históricos"],
       [state.webMovements?.length||0,"Movimientos web"]

@@ -69,13 +69,29 @@
     return false;
   }
 
+  const roleLabel = role => ({
+    ADMIN_TIC:"Administrador TIC",
+    EDITOR:"Editor",
+    CONSULTA:"Consulta"
+  }[role] || role || "Local");
+
+  const fmtDateTime = value => {
+    if(!value) return "Nunca";
+    const d=new Date(value);
+    return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("es-PE",{dateStyle:"short",timeStyle:"short"});
+  };
+
   function updateProfileUI() {
     const p = currentProfile || PraxisCloud.getProfile();
-    if ($("#profileName")) $("#profileName").textContent = (p && (p.nombre || p.email)) || "Usuario";
-    if ($("#profileRole")) $("#profileRole").textContent = ((p && p.role) || "LOCAL").replace("_"," ");
-    $$(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
-    $$(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
-    $$(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
+    const displayName=(p && (p.nombre || p.email)) || "Usuario";
+    const displayRole=roleLabel((p && p.role) || "LOCAL");
+    if ($("#profileName")) $("#profileName").textContent = displayName;
+    if ($("#profileRole")) $("#profileRole").textContent = displayRole;
+    if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = displayName;
+    if ($("#sidebarProfileRole")) $("#sidebarProfileRole").textContent = displayRole;
+    $(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
+    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
+    $(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 
   function groupCount(arr, getter) {
@@ -108,7 +124,7 @@
   function setView(view) {
     currentView = view;
     $$(".view").forEach(v => v.classList.toggle("active", v.dataset.viewPanel === view));
-    $$$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    $(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     const titles = {
       dashboard:["Inventario TIC","Gestión de equipos tecnológicos"],
       inventory:["Inventario maestro","Búsqueda, edición y control del Código TIC"],
@@ -643,34 +659,97 @@
   async function renderUsers() {
     if(!isAdmin() || !$("#usersTable")) return;
     try {
-      const users=await PraxisCloud.listUsers();
-      const rows=users.map(function(u){
-        return "<tr><td>"+esc(u.nombre||"")+"</td><td>"+esc(u.email||"")+"</td><td><select data-role-user='"+esc(u.id)+"'>"+
-          "<option value='ADMIN_TIC' "+(u.role==="ADMIN_TIC"?"selected":"")+">ADMIN_TIC</option>"+
-          "<option value='EDITOR' "+(u.role==="EDITOR"?"selected":"")+">EDITOR</option>"+
-          "<option value='CONSULTA' "+(u.role==="CONSULTA"?"selected":"")+">CONSULTA</option>"+
-          "</select></td><td><span class='badge "+(u.activo?"ok":"bad")+"'>"+(u.activo?"ACTIVO":"INACTIVO")+"</span></td></tr>";
+      const allUsers=await PraxisCloud.listUsers();
+      const q=norm($("#authorizedSearch")?.value||"");
+      const status=$("#authorizedStatus")?.value||"";
+      const role=$("#authorizedRole")?.value||"";
+
+      const activeCount=allUsers.filter(u=>u.activo).length;
+      const pendingCount=allUsers.length-activeCount;
+      const admins=allUsers.filter(u=>u.role==="ADMIN_TIC"&&u.activo).length;
+      const editors=allUsers.filter(u=>u.role==="EDITOR"&&u.activo).length;
+      const consult=allUsers.filter(u=>u.role==="CONSULTA"&&u.activo).length;
+
+      if($("#authorizedSummary")) $("#authorizedSummary").innerHTML=[
+        [allUsers.length,"Cuentas registradas"],
+        [activeCount,"Personal autorizado"],
+        [pendingCount,"Pendientes / bloqueados"],
+        [admins,"Administradores TIC"],
+        [editors,"Editores"],
+        [consult,"Solo consulta"]
+      ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
+
+      const users=allUsers.filter(u=>{
+        const hay=norm([u.nombre,u.email,u.role].join(" "));
+        return (!q||hay.includes(q))
+          && (!status||(status==="ACTIVO"?u.activo:!u.activo))
+          && (!role||u.role===role);
+      });
+
+      const me=currentProfile?.id;
+      const rows=users.map(u=>{
+        const isMe=u.id===me;
+        const statusBadge=u.activo
+          ? '<span class="badge ok">AUTORIZADO</span>'
+          : '<span class="badge warn">PENDIENTE / BLOQUEADO</span>';
+        const actionText=u.activo?"Desautorizar":"Autorizar";
+        const actionClass=u.activo?"btn-danger":"btn-success";
+        return `<tr>
+          <td>
+            <div class="user-name-cell"><span class="avatar mini">TIC</span><div><b>${esc(u.nombre||"Sin nombre")}</b>${isMe?'<span class="you-tag">Tú</span>':""}<div class="muted">${esc(u.email||"")}</div></div></div>
+          </td>
+          <td>
+            <select class="role-select" data-role-user="${esc(u.id)}" ${isMe&&u.role==="ADMIN_TIC"&&admins<=1?"disabled":""}>
+              <option value="ADMIN_TIC" ${u.role==="ADMIN_TIC"?"selected":""}>Administrador TIC</option>
+              <option value="EDITOR" ${u.role==="EDITOR"?"selected":""}>Editor</option>
+              <option value="CONSULTA" ${u.role==="CONSULTA"?"selected":""}>Consulta</option>
+            </select>
+          </td>
+          <td>${statusBadge}</td>
+          <td>${esc(fmtDateTime(u.last_login_at))}</td>
+          <td>${esc(fmtDateTime(u.created_at))}</td>
+          <td><button class="btn ${actionClass} btn-small" data-active-user="${esc(u.id)}" data-next-active="${u.activo?"false":"true"}" ${isMe?"disabled":""}>${actionText}</button></td>
+        </tr>`;
       }).join("");
-      $("#usersTable").innerHTML="<div class='table-wrap'><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead><tbody>"+(rows||"<tr><td colspan='4'>Sin usuarios.</td></tr>")+"</tbody></table></div>";
-      $$("[data-role-user]").forEach(function(sel){
-        sel.onchange=async function(){
+
+      $("#usersTable").innerHTML=`<div class="table-wrap"><table class="authorized-table"><thead><tr><th>Personal</th><th>Rol</th><th>Acceso</th><th>Último acceso</th><th>Registro</th><th>Acción</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No se encontró personal con esos filtros.</td></tr>'}</tbody></table></div>`;
+
+      $$("[data-role-user]").forEach(sel=>{
+        sel.onchange=async()=>{
           const role=sel.value;
-          if(!confirm("¿Cambiar el rol a "+role+"?")){ await renderUsers(); return; }
-          try {
+          if(!confirm("¿Cambiar el rol de este usuario a "+roleLabel(role)+"?")){await renderUsers();return;}
+          try{
             await PraxisCloud.setUserRole(sel.dataset.roleUser,role);
             toast("Rol actualizado.","success");
             await renderUsers();
             await renderAudit();
-          } catch(err) {
+          }catch(err){
             console.error(err);
             toast((err&&err.message)||"No se pudo actualizar el rol.","error");
             await renderUsers();
           }
         };
       });
+
+      $$("[data-active-user]").forEach(btn=>{
+        btn.onclick=async()=>{
+          const active=btn.dataset.nextActive==="true";
+          const label=active?"autorizar":"desautorizar";
+          if(!confirm("¿Seguro que deseas "+label+" a este usuario?")) return;
+          try{
+            await PraxisCloud.setUserActive(btn.dataset.activeUser,active);
+            toast(active?"Personal autorizado.":"Acceso retirado.","success");
+            await renderUsers();
+            await renderAudit();
+          }catch(err){
+            console.error(err);
+            toast((err&&err.message)||"No se pudo actualizar la autorización.","error");
+          }
+        };
+      });
     } catch(err) {
       console.error(err);
-      $("#usersTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudieron cargar los usuarios.")+"</div>";
+      $("#usersTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudo cargar el personal autorizado.")+"</div>";
     }
   }
 
@@ -690,13 +769,17 @@
 
   async function enterCloudApp() {
     currentProfile=await PraxisCloud.loadProfile();
-    if(!currentProfile || !currentProfile.activo) throw new Error("Tu usuario está inactivo.");
+    if(!currentProfile) throw new Error("No se encontró el perfil institucional.");
 
-    if(currentProfile.role==="CONSULTA"){
+    if(!currentProfile.activo || currentProfile.role==="CONSULTA"){
       try{
         const promoted=await PraxisCloud.bootstrapAdmin();
         if(promoted) currentProfile=await PraxisCloud.loadProfile();
       }catch(err){ console.warn("Bootstrap admin no aplicado",err); }
+    }
+
+    if(!currentProfile.activo){
+      throw new Error("Tu cuenta está pendiente de autorización por el Administrador TIC.");
     }
 
     const remote=await PraxisCloud.loadState();
@@ -764,12 +847,17 @@
     $("#clearLocalBtn").onclick=clearLocalData;
     if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
     if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
-    if($("#logoutBtn")) $("#logoutBtn").onclick=async()=>{
+    if($("#authorizedSearch")) $("#authorizedSearch").addEventListener("input",renderUsers);
+    if($("#authorizedStatus")) $("#authorizedStatus").addEventListener("change",renderUsers);
+    if($("#authorizedRole")) $("#authorizedRole").addEventListener("change",renderUsers);
+    const doLogout=async()=>{
       if(realtimeChannel){await PraxisCloud.unsubscribe(realtimeChannel);realtimeChannel=null;}
       await PraxisCloud.signOut();
       state=null;currentProfile=null;
-      showAuth("Sesión cerrada.","info");
+      showAuth("Sesión cerrada correctamente.","info");
     };
+    if($("#logoutBtn")) $("#logoutBtn").onclick=doLogout;
+    if($("#logoutSidebarBtn")) $("#logoutSidebarBtn").onclick=doLogout;
 
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>$(sel).addEventListener("input",()=>{page=1;renderInventory()}));
     $("#peopleSearch").addEventListener("input",renderPeople);
@@ -826,7 +914,7 @@
         else showAuth();
       } catch(err) {
         console.error(err);
-        showAuth("No se pudo conectar con la base de datos. Revisa la configuración de Supabase.","error");
+        showAuth((err&&err.message)||"No se pudo conectar con la base de datos.","error");
       }
     } else {
       state=await PraxisDB.get(STATE_KEY);

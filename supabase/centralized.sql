@@ -11,6 +11,17 @@ begin
 end
 $$;
 
+create table if not exists public.authorized_accounts (
+  email text primary key,
+  nombre text,
+  role praxis_role not null default 'CONSULTA',
+  activo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.authorized_accounts enable row level security;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -96,23 +107,34 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_auth public.authorized_accounts%rowtype;
 begin
   if new.email is null or lower(new.email) not like '%@praxis.edu.pe' then
     raise exception 'EMAIL_DOMAIN_NOT_ALLOWED';
   end if;
 
+  select *
+    into v_auth
+  from public.authorized_accounts
+  where email = lower(new.email)
+    and activo = true;
+
   insert into public.profiles(id,email,nombre,role,activo)
   values (
     new.id,
     lower(new.email),
-    coalesce(nullif(new.raw_user_meta_data->>'nombre',''), split_part(new.email,'@',1)),
-    'CONSULTA',
-    false
+    coalesce(nullif(v_auth.nombre,''), nullif(new.raw_user_meta_data->>'nombre',''), split_part(new.email,'@',1)),
+    coalesce(v_auth.role,'CONSULTA'::praxis_role),
+    case when v_auth.email is not null then true else false end
   )
   on conflict (id) do update
     set email=excluded.email,
         nombre=coalesce(nullif(public.profiles.nombre,''),excluded.nombre),
+        role=excluded.role,
+        activo=excluded.activo,
         updated_at=now();
+
   return new;
 end;
 $$;
@@ -133,6 +155,7 @@ as $$
 declare
   v_email text;
   v_confirmed timestamptz;
+  v_auth public.authorized_accounts%rowtype;
 begin
   if auth.uid() is null then
     raise exception 'AUTH_REQUIRED';
@@ -143,26 +166,30 @@ begin
   from auth.users
   where id = auth.uid();
 
-  if v_email is null or lower(v_email) not like '%@praxis.edu.pe' then
+  if v_email is null or v_confirmed is null then
     return false;
   end if;
 
-  if v_confirmed is null then
-    return false;
-  end if;
+  select *
+    into v_auth
+  from public.authorized_accounts
+  where email = lower(v_email)
+    and activo = true
+    and role = 'ADMIN_TIC';
 
-  if exists(select 1 from public.profiles where role='ADMIN_TIC' and activo=true) then
+  if v_auth.email is null then
     return false;
   end if;
 
   update public.profiles
      set role='ADMIN_TIC',
          activo=true,
+         nombre=coalesce(nullif(v_auth.nombre,''),nombre),
          updated_at=now()
    where id=auth.uid();
 
   insert into public.audit_events(user_id,action,summary)
-  values(auth.uid(),'BOOTSTRAP_ADMIN',jsonb_build_object('email',v_email));
+  values(auth.uid(),'BOOTSTRAP_ADMIN',jsonb_build_object('email',lower(v_email)));
 
   return true;
 end;
@@ -346,6 +373,9 @@ drop policy if exists audit_read_admin on public.audit_events;
 create policy audit_read_admin on public.audit_events
 for select to authenticated
 using (public.current_praxis_role() = 'ADMIN_TIC');
+
+-- La lista previa de cuentas autorizadas no se expone al navegador.
+revoke all on table public.authorized_accounts from anon, authenticated;
 
 -- Las escrituras se realizan solo mediante RPC controladas.
 revoke all on function public.bootstrap_first_admin() from public, anon;

@@ -723,27 +723,76 @@
   }
 
   async function init() {
-    state=await PraxisDB.get(STATE_KEY);
-    renderAll();
-    $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
-    $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
+    cloudMode=PraxisCloud.configured();
+
+    $(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+    $("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
-    $("#modalClose").onclick=closeModal;$("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
+    $("#modalClose").onclick=closeModal;
+    $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
     $("#dismissPrivacy").onclick=()=>$("#privacyBanner").remove();
-    $("#importBtnTop").onclick=()=>$("#excelInput").click();$("#importBtnEmpty").onclick=()=>$("#excelInput").click();
+    $("#importBtnTop").onclick=()=>$("#excelInput").click();
+    $("#importBtnEmpty").onclick=()=>$("#excelInput").click();
     $("#excelInput").onchange=e=>{const f=e.target.files[0];if(f)importExcel(f);e.target.value=""};
     $("#demoInfoBtn").onclick=demoInfo;
-    $("#addAssetBtn").onclick=openAddAsset;$("#exportCsvBtn").onclick=exportInventory;$("#backupBtn").onclick=downloadBackup;$("#exportMovementsBtn").onclick=exportMovements;
+    $("#addAssetBtn").onclick=openAddAsset;
+    $("#exportCsvBtn").onclick=exportInventory;
+    $("#backupBtn").onclick=downloadBackup;
+    $("#exportMovementsBtn").onclick=exportMovements;
     $("#restoreBtn").onclick=()=>$("#restoreInput").click();
     $("#restoreInput").onchange=e=>{const f=e.target.files[0];if(f)restoreBackup(f);e.target.value=""};
     $("#clearLocalBtn").onclick=clearLocalData;
+    if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
+    if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
+    if($("#logoutBtn")) $("#logoutBtn").onclick=async()=>{
+      await PraxisCloud.signOut();
+      state=null;currentProfile=null;
+      showAuth("Sesión cerrada.","info");
+    };
+
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>$(sel).addEventListener("input",()=>{page=1;renderInventory()}));
     $("#peopleSearch").addEventListener("input",renderPeople);
     $("#reviewSearch").addEventListener("input",renderReview);
     $("#globalSearch").addEventListener("input",e=>{
       if(!state?.inventory?.length)return;
-      $("#inventorySearch").value=e.target.value;page=1;if(e.target.value.trim())setView("inventory");renderInventory();
+      $("#inventorySearch").value=e.target.value;
+      page=1;
+      if(e.target.value.trim())setView("inventory");
+      renderInventory();
     });
+
+    if($("#loginForm")) $("#loginForm").onsubmit=async e=>{
+      e.preventDefault();
+      const email=$("#loginEmail").value.trim();
+      const password=$("#loginPassword").value;
+      const box=$("#authMessage");
+      box.textContent="Ingresando…";
+      box.className="auth-message show info";
+      try {
+        await PraxisCloud.signIn(email,password);
+        await enterCloudApp();
+      } catch(err) {
+        console.error(err);
+        showAuth((err&&err.message)||"No se pudo iniciar sesión.","error");
+      }
+    };
+
+    if(cloudMode) {
+      try {
+        const session=await PraxisCloud.getSession();
+        if(session) await enterCloudApp();
+        else showAuth();
+      } catch(err) {
+        console.error(err);
+        showAuth("No se pudo conectar con la base de datos. Revisa la configuración de Supabase.","error");
+      }
+    } else {
+      state=await PraxisDB.get(STATE_KEY);
+      $("#authGate").classList.add("hidden");
+      $("#appShell").classList.remove("hidden");
+      updateProfileUI();
+      renderAll();
+    }
   }
 
   document.addEventListener("DOMContentLoaded",init);

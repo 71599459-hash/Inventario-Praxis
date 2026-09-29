@@ -6,6 +6,8 @@
   let currentView = "dashboard";
   let page = 1;
   let selectedId = null;
+  let cloudMode = false;
+  let currentProfile = null;
 
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -31,8 +33,48 @@
     setTimeout(() => el.remove(), 3500);
   }
 
-  async function persist() {
+  async function persist(action="ACTUALIZAR_INVENTARIO") {
     await PraxisDB.set(STATE_KEY, state);
+    if (!cloudMode || !PraxisCloud.configured()) return true;
+    try {
+      await PraxisCloud.saveState(state, action);
+      return true;
+    } catch (err) {
+      console.error(err);
+      if (err && err.message === "VERSION_CONFLICT") {
+        const latest = await PraxisCloud.loadState();
+        state = latest.state;
+        await PraxisDB.set(STATE_KEY, state);
+        renderAll();
+        toast("Otro usuario actualizó el inventario. Se recargó la versión más reciente; vuelve a realizar tu cambio.","error");
+        throw err;
+      }
+      toast((err && err.message) || "No se pudo guardar en la base de datos.","error");
+      throw err;
+    }
+  }
+
+  function canEdit() {
+    return !cloudMode || PraxisCloud.canEdit();
+  }
+
+  function isAdmin() {
+    return cloudMode && PraxisCloud.isAdmin();
+  }
+
+  function ensureEditable() {
+    if (canEdit()) return true;
+    toast("Tu usuario tiene rol CONSULTA. No puede modificar el inventario.","error");
+    return false;
+  }
+
+  function updateProfileUI() {
+    const p = currentProfile || PraxisCloud.getProfile();
+    if ($("#profileName")) $("#profileName").textContent = (p && (p.nombre || p.email)) || "Usuario";
+    if ($("#profileRole")) $("#profileRole").textContent = ((p && p.role) || "LOCAL").replace("_"," ");
+    $(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
+    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
+    $(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 
   function groupCount(arr, getter) {
@@ -77,10 +119,12 @@
       materials:["Materiales","Insumos, materiales y herramientas"],
       movements:["Movimientos","Transferencias e historial"],
       review:["Revisión","Conflictos, códigos faltantes y depuración"],
-      reports:["Reportes","Resumen del inventario"]
+      reports:["Reportes","Resumen del inventario"],
+      users:["Usuarios y roles","Administración de accesos y auditoría"]
     };
     $("#pageTitle").textContent = titles[view][0];
     $("#pageSubtitle").textContent = titles[view][1];
+    if (view === "users" && isAdmin()) { renderUsers(); renderAudit(); }
     if (window.innerWidth < 850) $("#sidebar").classList.remove("open");
   }
 

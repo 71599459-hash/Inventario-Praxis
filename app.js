@@ -876,7 +876,7 @@
       ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
 
       const users=allUsers.filter(u=>{
-        const hay=norm([u.nombre,u.email,u.role].join(" "));
+        const hay=norm([u.nombre,u.email,u.dni,u.cargo,u.sede,u.area,u.role].join(" "));
         return (!q||hay.includes(q))
           && (!status||(status==="ACTIVO"?u.activo:!u.activo))
           && (!role||u.role===role);
@@ -892,8 +892,9 @@
         const actionClass=u.activo?"btn-danger":"btn-success";
         return `<tr>
           <td>
-            <div class="user-name-cell"><span class="avatar mini">TIC</span><div><b>${esc(u.nombre||"Sin nombre")}</b>${isMe?'<span class="you-tag">Tú</span>':""}<div class="muted">${esc(u.email||"")}</div></div></div>
+            <div class="user-name-cell"><span class="avatar mini">TIC</span><div><b>${esc(u.nombre||"Sin nombre")}</b>${isMe?'<span class="you-tag">Tú</span>':""}<div class="muted">${esc(u.email||"")}</div><div class="muted">DNI: ${esc(u.dni||"—")}</div></div></div>
           </td>
+          <td><b>${esc(u.cargo||"—")}</b><div class="muted">${esc([u.sede,u.area].filter(Boolean).join(" / ")||"—")}</div></td>
           <td>
             <select class="role-select" data-role-user="${esc(u.id)}" ${isMe&&u.role==="ADMIN_TIC"&&admins<=1?"disabled":""}>
               <option value="ADMIN_TIC" ${u.role==="ADMIN_TIC"?"selected":""}>Administrador TIC</option>
@@ -903,12 +904,11 @@
           </td>
           <td>${statusBadge}</td>
           <td>${esc(fmtDateTime(u.last_login_at))}</td>
-          <td>${esc(fmtDateTime(u.created_at))}</td>
           <td><button class="btn ${actionClass} btn-small" data-active-user="${esc(u.id)}" data-next-active="${u.activo?"false":"true"}" ${isMe?"disabled":""}>${actionText}</button></td>
         </tr>`;
       }).join("");
 
-      $("#usersTable").innerHTML=`<div class="table-wrap"><table class="authorized-table"><thead><tr><th>Personal</th><th>Rol</th><th>Acceso</th><th>Último acceso</th><th>Registro</th><th>Acción</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No se encontró personal con esos filtros.</td></tr>'}</tbody></table></div>`;
+      $("#usersTable").innerHTML=`<div class="table-wrap"><table class="authorized-table"><thead><tr><th>Personal</th><th>Cargo / ubicación</th><th>Rol</th><th>Acceso</th><th>Último acceso</th><th>Acción</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No se encontró personal con esos filtros.</td></tr>'}</tbody></table></div>`;
 
       $$("[data-role-user]").forEach(sel=>{
         sel.onchange=async()=>{

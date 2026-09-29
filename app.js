@@ -120,8 +120,10 @@
     const q = [
       [inv.length,"Registros maestros"],
       [state.stats?.duplicateCodes||0,"Códigos consolidados"],
+      [state.stats?.conflictCodes||inv.filter(r=>r.needsReview).length,"Ubicación por revisar"],
       [inv.filter(r=>r.serie).length,"Con serie/código"],
-      [state.transactions?.length||0,"Registros históricos"]
+      [state.transactions?.length||0,"Registros históricos"],
+      [state.webMovements?.length||0,"Movimientos web"]
     ];
     $("#qualityGrid").innerHTML = q.map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
     $("#dashboardTable").innerHTML = tableHtml(inv.slice(0,10), false);
@@ -163,7 +165,7 @@
         <td>${esc(r.sede)}</td>
         <td>${esc(r.area)}</td>
         <td>${esc(r.responsable)}${r.dni?`<div class="muted">DNI: ${esc(r.dni)}</div>`:""}</td>
-        <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span><div class="muted">${locationLabel(r)}</div></td>
+        <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span><div class="muted">${locationLabel(r)}</div>${r.needsReview?'<div class="muted" style="color:#b15c00;font-weight:800">⚠ Revisar ubicación</div>':""}</td>
         <td><div class="table-actions"><button data-open="${esc(r.id)}">Ver</button></div></td>
       </tr>`).join("");
 
@@ -273,8 +275,10 @@
     ];
     const history=(r.history||[]).map(h=>`<div class="history-item"><b>${esc(h.source||h.type||"Movimiento")}</b> · ${esc([h.sede,h.area].filter(Boolean).join(" / "))}${h.responsable?` · ${esc(h.responsable)}`:""}<br><small>${esc(h.fecha||"")} ${esc(h.observaciones||"")}</small></div>`).join("");
     const duplicateNotice=r.duplicateSources>1?`<div class="alert info"><b>Código consolidado:</b> este código aparecía ${r.duplicateSources} veces en las hojas activas del Excel. El sistema lo mantiene como un solo registro.</div>`:"";
+    const conflictNotice=r.needsReview?`<div class="alert error"><b>Revisar ubicación actual:</b> el mismo Código TIC aparece asociado a más de una sede, área o responsable en el Excel. Verifica el historial antes de confirmar una transferencia.<br><span class="muted">${esc((r.conflictLocations||[]).join(" · "))}</span></div>`:"";
     showModal(`${r.codigo||r.id} · ${r.equipo||"Equipo"}`,`${r.sede||""} ${r.area?"/ "+r.area:""}`,`
       ${duplicateNotice}
+      ${conflictNotice}
       <div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-field"><span>${esc(k)}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
       <div class="modal-actions">
         <button id="moveAsset" class="btn btn-primary">Mover / transferir</button>

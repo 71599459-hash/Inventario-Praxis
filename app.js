@@ -323,13 +323,124 @@
       ${conflictNotice}
       <div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-field"><span>${esc(k)}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
       <div class="modal-actions">
+        <button id="editAsset" class="btn btn-soft">Editar ficha</button>
         <button id="moveAsset" class="btn btn-primary">Mover / transferir</button>
         <button id="warehouseAsset" class="btn btn-warning">Enviar al almacén</button>
+        ${r.needsReview?'<button id="resolveAsset" class="btn btn-danger">Resolver ubicación</button>':""}
       </div>
       <h4 class="section-title">Historial del Código TIC</h4>${history||`<div class="muted">Sin historial adicional.</div>`}
     `);
+    $("#editAsset").onclick=()=>openEditAsset(r);
     $("#moveAsset").onclick=()=>openMove(r,false);
     $("#warehouseAsset").onclick=()=>openMove(r,true);
+    if (r.needsReview) $("#resolveAsset").onclick=()=>openResolveConflict(r);
+  }
+
+  function openEditAsset(r) {
+    showModal(`Editar ${r.codigo||r.id}`,"Actualiza la ficha sin crear un segundo registro.",`
+      <div id="formAlert"></div>
+      <div class="form-grid">
+        <div class="form-field"><label>Código TIC</label><input id="eCode" value="${esc(r.codigo||"")}" placeholder="Ej. MON-000100"></div>
+        <div class="form-field"><label>Código Padre TIC</label><input id="eParent" value="${esc(r.codigoPadre||"")}"></div>
+        <div class="form-field"><label>Equipo / material *</label><input id="eEquipment" value="${esc(r.equipo||"")}"></div>
+        <div class="form-field"><label>Descripción</label><input id="eDescription" value="${esc(r.descripcion||"")}"></div>
+        <div class="form-field"><label>Marca</label><input id="eBrand" value="${esc(r.marca||"")}"></div>
+        <div class="form-field"><label>Modelo</label><input id="eModel" value="${esc(r.modelo||"")}"></div>
+        <div class="form-field"><label>Serie o código</label><input id="eSerial" value="${esc(r.serie||"")}"></div>
+        <div class="form-field"><label>Estado</label><input id="eStatus" value="${esc(r.estado||"")}"></div>
+        <div class="form-field"><label>Condición</label><input id="eCondition" value="${esc(r.condicion||"")}"></div>
+        <div class="form-field"><label>Situación</label><input id="eSituation" value="${esc(r.situacion||"")}"></div>
+        <div class="form-field"><label>Sede</label><input id="eSite" value="${esc(r.sede||"")}"></div>
+        <div class="form-field"><label>Área / aula</label><input id="eArea" value="${esc(r.area||"")}"></div>
+        <div class="form-field full"><label>Responsable</label><input id="ePerson" value="${esc(r.responsable||"")}"></div>
+        <div class="form-field"><label>DNI</label><input id="eDni" value="${esc(r.dni||"")}"></div>
+        <div class="form-field full"><label>Observaciones</label><textarea id="eObs">${esc(r.observaciones||"")}</textarea></div>
+      </div>
+      <div class="modal-actions"><button id="saveEditAsset" class="btn btn-primary">Guardar cambios</button></div>
+    `);
+
+    $("#saveEditAsset").onclick=async()=>{
+      const alert=$("#formAlert");
+      const newCode=PraxisExcel.cleanCode($("#eCode").value);
+      const equipment=norm($("#eEquipment").value);
+      if(!equipment){alert.className="alert error";alert.textContent="Equipo / Material es obligatorio.";return}
+      if(r.codigo && !newCode){alert.className="alert error";alert.textContent="Un equipo que ya tiene Código TIC no puede quedar sin código.";return}
+      if(newCode){
+        const existing=activeInventory().find(x=>x!==r && norm(x.codigo)===newCode);
+        if(existing){alert.className="alert error";alert.innerHTML=`El Código TIC <b>${esc(newCode)}</b> ya existe en ${esc(existing.sede)} / ${esc(existing.area)}. No se puede duplicar.`;return}
+      }
+      const serial=$("#eSerial").value.trim();
+      const duplicateSerial=serial&&activeInventory().find(x=>x!==r&&x.serie&&norm(x.serie)===norm(serial));
+      if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`))return;
+
+      const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
+      r.history=r.history||[];
+      r.history.unshift({type:"WEB",source:"Edición web",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Ficha anterior antes de edición"});
+
+      if(newCode && newCode!==r.codigo){ r.codigo=newCode; r.id=newCode; }
+      r.codigoPadre=PraxisExcel.cleanCode($("#eParent").value);
+      r.equipo=equipment;
+      r.descripcion=$("#eDescription").value.trim();
+      r.marca=norm($("#eBrand").value);
+      r.modelo=$("#eModel").value.trim();
+      r.serie=serial;
+      r.estado=norm($("#eStatus").value);
+      r.condicion=norm($("#eCondition").value);
+      r.situacion=norm($("#eSituation").value);
+      r.sede=norm($("#eSite").value);
+      r.area=$("#eArea").value.trim();
+      r.responsable=$("#ePerson").value.trim();
+      r.dni=$("#eDni").value.trim();
+      r.observaciones=$("#eObs").value.trim();
+      r.locationType=norm(r.area).includes("ALMAC")?"ALMACEN":r.responsable?"ASIGNADO":"SEDE";
+
+      state.webMovements=state.webMovements||[];
+      state.webMovements.unshift({
+        id:crypto.randomUUID(),fecha:today(),source:"Edición web",codigo:r.codigo,equipo:r.equipo,
+        from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),
+        responsable:r.responsable,observaciones:"Actualización de ficha"
+      });
+      await persist();closeModal();renderAll();toast("Ficha actualizada sin duplicar el Código TIC.","success");
+    };
+  }
+
+  function openResolveConflict(r) {
+    const candidates=(r.conflictRecords&&r.conflictRecords.length?r.conflictRecords:(r.history||[]).filter(h=>h.sede||h.area||h.responsable))
+      .filter((x,i,a)=>a.findIndex(y=>norm([y.sede,y.area,y.responsable].join("|"))===norm([x.sede,x.area,x.responsable].join("|")))===i);
+
+    const rows=candidates.map((x,i)=>`<tr>
+      <td>${esc(x.source||"Excel")}</td>
+      <td>${esc(x.fecha||"")}</td>
+      <td>${esc(x.sede||"")}</td>
+      <td>${esc(x.area||"")}</td>
+      <td>${esc(x.responsable||"")}</td>
+      <td>${esc(x.estado||"")}</td>
+      <td><button class="btn btn-soft" data-pick-conflict="${i}">Usar esta ubicación</button></td>
+    </tr>`).join("");
+
+    showModal(`Resolver ${r.codigo||r.id}`,"Elige la ubicación vigente según el Excel o define una nueva manualmente.",`
+      <div class="alert info"><b>No se creará otro Código TIC.</b> Solo se confirmará la ubicación vigente y se conservarán las demás apariciones en el historial.</div>
+      <div class="table-wrap"><table><thead><tr><th>Hoja</th><th>Fecha</th><th>Sede</th><th>Área</th><th>Responsable</th><th>Estado</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7">No hay ubicaciones estructuradas. Define la ubicación manualmente.</td></tr>'}</tbody></table></div>
+      <div class="modal-actions"><button id="manualConflict" class="btn btn-primary">Definir ubicación manualmente</button></div>
+    `);
+
+    $("[data-pick-conflict]").forEach(b=>b.onclick=async()=>{
+      const x=candidates[Number(b.dataset.pickConflict)];
+      const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
+      r.history=r.history||[];
+      r.history.unshift({type:"WEB",source:"Resolución de conflicto",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Ubicación anterior antes de resolver conflicto"});
+      r.sede=norm(x.sede||"");r.area=x.area||"";r.responsable=x.responsable||"";r.dni=x.dni||r.dni||"";
+      if(x.estado) r.estado=norm(x.estado);
+      if(x.condicion) r.condicion=norm(x.condicion);
+      if(x.situacion) r.situacion=norm(x.situacion);
+      if(x.source) r.source=x.source;
+      r.locationType=norm(r.area).includes("ALMAC")?"ALMACEN":r.responsable?"ASIGNADO":"SEDE";
+      r.needsReview=false;r.conflictLocations=[];r.conflictRecords=[];
+      state.webMovements=state.webMovements||[];
+      state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Resolución de conflicto",codigo:r.codigo,equipo:r.equipo,from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),responsable:r.responsable,observaciones:`Ubicación confirmada desde ${x.source||"Excel"} fila ${x.row||""}`});
+      await persist();closeModal();renderAll();toast("Ubicación confirmada y conflicto resuelto.","success");
+    });
+    $("#manualConflict").onclick=()=>openMove(r,false);
   }
 
   function openMove(r,toWarehouse=false) {
@@ -350,6 +461,7 @@
       r.sede=newSite;r.area=newArea;r.responsable=newResp;r.locationType=norm(newArea).includes("ALMAC")?"ALMACEN":newResp?"ASIGNADO":"SEDE";
       r.needsReview=false;
       r.conflictLocations=[];
+      r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Movimiento web",codigo:r.codigo,equipo:r.equipo,from:[oldSite,oldArea,oldResp].filter(Boolean).join(" / "),to:[newSite,newArea,newResp].filter(Boolean).join(" / "),responsable:newResp,motivo,observaciones:motivo});
       await persist();closeModal();renderAll();toast("Movimiento guardado sin duplicar el Código TIC.","success");
@@ -405,7 +517,7 @@
       const serial=$("#aSerial").value.trim();
       const duplicateSerial=serial&&activeInventory().find(r=>r.serie&&norm(r.serie)===norm(serial));
       if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`))return;
-      const r={id:code,codigo:code,codigoPadre:"",equipo:equipment,descripcion:"",marca:norm($("#aBrand").value),modelo:$("#aModel").value.trim(),serie:serial,sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),dni:"",estado:$("#aStatus").value,condicion:"",situacion:"INTERNO",source:"Registro web",observaciones:$("#aObs").value.trim(),duplicateSources:1,locationType:$("#aPerson").value.trim()?"ASIGNADO":norm($("#aArea").value).includes("ALMAC")?"ALMACEN":"SEDE",history:[{type:"WEB",source:"Registro web",fecha:today(),sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),estado:$("#aStatus").value,observaciones:"Registro creado desde la web"}]};
+      const r={id:code,codigo:code,codigoPadre:"",equipo:equipment,descripcion:"",marca:norm($("#aBrand").value),modelo:$("#aModel").value.trim(),serie:serial,sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),dni:"",estado:$("#aStatus").value,condicion:"",situacion:"INTERNO",source:"Registro web",observaciones:$("#aObs").value.trim(),duplicateSources:1,needsReview:false,conflictLocations:[],conflictRecords:[],locationType:$("#aPerson").value.trim()?"ASIGNADO":norm($("#aArea").value).includes("ALMAC")?"ALMACEN":"SEDE",history:[{type:"WEB",source:"Registro web",fecha:today(),sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),estado:$("#aStatus").value,observaciones:"Registro creado desde la web"}]};
       state.inventory.unshift(r);state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:code,equipo:equipment,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),observaciones:r.observaciones});
       await persist();closeModal();renderAll();toast("Equipo registrado.","success");
     };

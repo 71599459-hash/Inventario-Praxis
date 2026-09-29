@@ -635,6 +635,80 @@
     toast("Datos locales borrados. Se conservó una copia de recuperación interna.","success");
   }
 
+  async function renderUsers() {
+    if(!isAdmin() || !$("#usersTable")) return;
+    try {
+      const users=await PraxisCloud.listUsers();
+      const rows=users.map(function(u){
+        return "<tr><td>"+esc(u.nombre||"")+"</td><td>"+esc(u.email||"")+"</td><td><select data-role-user='"+esc(u.id)+"'>"+
+          "<option value='ADMIN_TIC' "+(u.role==="ADMIN_TIC"?"selected":"")+">ADMIN_TIC</option>"+
+          "<option value='EDITOR' "+(u.role==="EDITOR"?"selected":"")+">EDITOR</option>"+
+          "<option value='CONSULTA' "+(u.role==="CONSULTA"?"selected":"")+">CONSULTA</option>"+
+          "</select></td><td><span class='badge "+(u.activo?"ok":"bad")+"'>"+(u.activo?"ACTIVO":"INACTIVO")+"</span></td></tr>";
+      }).join("");
+      $("#usersTable").innerHTML="<div class='table-wrap'><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead><tbody>"+(rows||"<tr><td colspan='4'>Sin usuarios.</td></tr>")+"</tbody></table></div>";
+      $("[data-role-user]").forEach(function(sel){
+        sel.onchange=async function(){
+          const role=sel.value;
+          if(!confirm("¿Cambiar el rol a "+role+"?")){ await renderUsers(); return; }
+          try {
+            await PraxisCloud.setUserRole(sel.dataset.roleUser,role);
+            toast("Rol actualizado.","success");
+            await renderUsers();
+            await renderAudit();
+          } catch(err) {
+            console.error(err);
+            toast((err&&err.message)||"No se pudo actualizar el rol.","error");
+            await renderUsers();
+          }
+        };
+      });
+    } catch(err) {
+      console.error(err);
+      $("#usersTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudieron cargar los usuarios.")+"</div>";
+    }
+  }
+
+  async function renderAudit() {
+    if(!isAdmin() || !$("#auditTable")) return;
+    try {
+      const items=await PraxisCloud.audit(100);
+      const rows=items.map(function(a){
+        return "<tr><td>"+esc(new Date(a.created_at).toLocaleString("es-PE"))+"</td><td>"+esc(a.action)+"</td><td>"+esc(a.user_id||"")+"</td><td>"+esc(a.version_before==null?"":a.version_before)+"</td><td>"+esc(a.version_after==null?"":a.version_after)+"</td></tr>";
+      }).join("");
+      $("#auditTable").innerHTML="<div class='table-wrap'><table><thead><tr><th>Fecha</th><th>Acción</th><th>Usuario</th><th>Versión anterior</th><th>Nueva versión</th></tr></thead><tbody>"+(rows||"<tr><td colspan='5'>Sin eventos.</td></tr>")+"</tbody></table></div>";
+    } catch(err) {
+      console.error(err);
+      $("#auditTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudo cargar la auditoría.")+"</div>";
+    }
+  }
+
+  async function enterCloudApp() {
+    currentProfile=await PraxisCloud.loadProfile();
+    if(!currentProfile || !currentProfile.activo) throw new Error("Tu usuario está inactivo.");
+    const remote=await PraxisCloud.loadState();
+    state=remote.state;
+    if(state) await PraxisDB.set(STATE_KEY,state);
+    $("#authGate").classList.add("hidden");
+    $("#appShell").classList.remove("hidden");
+    updateProfileUI();
+    renderAll();
+    setView("dashboard");
+  }
+
+  function showAuth(message,type) {
+    $("#appShell").classList.add("hidden");
+    $("#authGate").classList.remove("hidden");
+    const box=$("#authMessage");
+    if(message){
+      box.textContent=message;
+      box.className="auth-message show "+(type||"info");
+    } else {
+      box.textContent="";
+      box.className="auth-message";
+    }
+  }
+
   function demoInfo() {
     showModal("Cómo funciona","Diseñado para tu flujo de trabajo de Colegio Praxis.",`
       <div class="alert info">El sistema procesa las hojas <b>General, TIC - Almacén, Cámaras y Redes, Insum, mat y herra, Compras, Ventas y Préstamos</b>.</div>

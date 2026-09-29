@@ -14,7 +14,11 @@
   const $$ = s => [...document.querySelectorAll(s)];
   const esc = value => String(value ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const norm = value => PraxisExcel.norm(value);
-  const today = () => new Date().toISOString().slice(0,10);
+  const today = () => {
+    const d=new Date();
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  };
 
   const statusClass = s => {
     const x = norm(s);
@@ -962,7 +966,9 @@
         CAMBIAR_ROL:"Cambio de rol",
         AUTORIZAR_USUARIO:"Autorización de personal",
         DESAUTORIZAR_USUARIO:"Retiro de acceso",
-        BOOTSTRAP_ADMIN:"Alta del primer Administrador TIC"
+        BOOTSTRAP_ADMIN:"Alta del primer Administrador TIC",
+        IMPRIMIR_CARGO_INICIAL:"Ficha técnica · entrega inicial",
+        IMPRIMIR_CARGO_FINAL:"Ficha técnica · revisión final"
       }[action]||action||"Evento");
 
       const rows=items.map(a=>{

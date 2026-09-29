@@ -81,7 +81,7 @@ const PraxisCloud = (() => {
     const c=init(); if(!c) return null;
     const session=await getSession();
     if(!session){profile=null;return null;}
-    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo,last_login_at,created_at,updated_at").eq("id",session.user.id).single();
+    const {data,error}=await c.from("profiles").select("id,email,nombre,dni,cargo,sede,area,role,activo,last_login_at,created_at,updated_at").eq("id",session.user.id).single();
     if(error) throw error;
     profile=data;
     return profile;

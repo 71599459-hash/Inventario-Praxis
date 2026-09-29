@@ -26,6 +26,7 @@ const PraxisCloud = (() => {
     const {data,error}=await c.auth.signInWithPassword({email,password});
     if(error) throw error;
     await loadProfile();
+    try { await c.rpc("touch_login"); } catch(err) { console.warn("No se pudo registrar último acceso",err); }
     return data.session;
   }
 
@@ -60,7 +61,7 @@ const PraxisCloud = (() => {
     const c=init(); if(!c) return null;
     const session=await getSession();
     if(!session){profile=null;return null;}
-    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo").eq("id",session.user.id).single();
+    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo,last_login_at,created_at,updated_at").eq("id",session.user.id).single();
     if(error) throw error;
     profile=data;
     return profile;
@@ -96,7 +97,7 @@ const PraxisCloud = (() => {
 
   async function listUsers() {
     const c=init(); if(!c) return [];
-    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo,updated_at").order("nombre");
+    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo,last_login_at,created_at,updated_at").order("nombre");
     if(error) throw error;
     return data||[];
   }
@@ -106,6 +107,13 @@ const PraxisCloud = (() => {
     const {error}=await c.rpc("set_user_role",{p_user:userId,p_role:role});
     if(error) throw error;
   }
+
+  async function setUserActive(userId,active) {
+    const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
+    const {error}=await c.rpc("set_user_active",{p_user:userId,p_active:Boolean(active)});
+    if(error) throw error;
+  }
+
 
   async function audit(limit=100) {
     const c=init(); if(!c) return [];
@@ -141,5 +149,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

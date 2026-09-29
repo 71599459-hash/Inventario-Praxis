@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0c2f50" />
+  <meta name="description" content="Sistema de Inventario TIC del Colegio Praxis" />
+  <title>Inventario TIC | Colegio Praxis</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27><rect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%230b2945%27/><text x=%2732%27 y=%2743%27 font-size=%2736%27 text-anchor=%27middle%27 fill=%27white%27>P</text></svg>" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="appShell" class="app-shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand">
+        <img data-brand-logo alt="Colegio Praxis" />
+        <div>
+          <span>Colegio</span>
+          <strong>PRAXIS</strong>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Menú principal">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Inicio</button>
+        <button class="nav-item" data-view="inventory"><span>▤</span> Inventario maestro</button>
+        <button class="nav-item" data-view="general"><span>▣</span> General / administrativos</button>
+        <button class="nav-item" data-view="sites"><span>⌂</span> Sedes</button>
+        <button class="nav-item" data-view="people"><span>♟</span> Colaboradores</button>
+        <button class="nav-item" data-view="warehouse"><span>▱</span> Almacén TIC</button>
+        <button class="nav-item" data-view="networks"><span>◉</span> Cámaras y redes</button>
+        <button class="nav-item" data-view="materials"><span>◫</span> Materiales</button>
+        <button class="nav-item" data-view="movements"><span>⇄</span> Movimientos</button>
+        <button class="nav-item" data-view="reports"><span>▥</span> Reportes</button>
+      </nav>
+
+      <div class="school-photo">
+        <img data-brand-school alt="Sede Centro Colegio Praxis" />
+        <div class="school-caption">
+          <strong>Colegio Praxis</strong>
+          <span>Inventario TIC 2026</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="mobileMenu" class="icon-button mobile-only" aria-label="Abrir menú">☰</button>
+        <div class="title-block">
+          <h1 id="pageTitle">Inventario TIC</h1>
+          <span id="pageSubtitle">Gestión de equipos tecnológicos</span>
+        </div>
+        <div class="global-search">
+          <span>⌕</span>
+          <input id="globalSearch" autocomplete="off"
+                 placeholder="Buscar código TIC, equipo, serie, colaborador, sede, área..." />
+        </div>
+        <div class="top-actions">
+          <button id="importBtnTop" class="btn btn-soft">Importar Excel</button>
+          <div class="profile"><span class="avatar">TIC</span><b>Administrador</b></div>
+        </div>
+      </header>
+
+      <section class="content">
+        <div id="privacyBanner" class="privacy-banner">
+          <div>
+            <strong>Datos protegidos.</strong>
+            El archivo Excel se procesa dentro de tu navegador y no se publica en GitHub.
+          </div>
+          <button id="dismissPrivacy" aria-label="Cerrar">×</button>
+        </div>
+
+        <div id="emptyState" class="empty-state hidden">
+          <img data-brand-logo alt="" />
+          <h2>Carga el inventario oficial de Colegio Praxis</h2>
+          <p>Selecciona tu archivo <b>.xlsx</b>. El sistema consolidará Código TIC, sedes, colaboradores, almacén, cámaras, redes, materiales y movimientos sin duplicar los códigos.</p>
+          <div class="empty-actions">
+            <button id="importBtnEmpty" class="btn btn-primary">Seleccionar Inventario Excel</button>
+            <button id="demoInfoBtn" class="btn btn-soft">¿Qué hará el sistema?</button>
+          </div>
+          <div class="security-note">El repositorio es público: por seguridad los DNI, responsables y detalles del inventario real no se suben al código fuente.</div>
+        </div>
+
+        <div id="workspace" class="hidden">
+          <section class="view active" data-view-panel="dashboard">
+            <div id="kpiGrid" class="kpi-grid"></div>
+
+            <div class="dashboard-grid">
+              <article class="panel">
+                <div class="panel-head">
+                  <div><h3>Equipos por categoría</h3><p>Componentes principales del inventario actual</p></div>
+                </div>
+                <div id="categoryBars" class="bar-list"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <div><h3>Inventario por sede</h3><p>Distribución de registros actuales</p></div>
+                </div>
+                <div id="siteBars" class="bar-list"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <div><h3>Control del inventario</h3><p>Calidad de la información importada</p></div>
+                </div>
+                <div id="qualityGrid" class="quality-grid"></div>
+              </article>
+            </div>
+
+            <article class="panel">
+              <div class="panel-head panel-head-row">
+                <div><h3>Vista rápida del inventario</h3><p>Haz clic en un registro para revisar su ficha e historial.</p></div>
+                <button class="btn btn-primary" data-go="inventory">Ver inventario completo</button>
+              </div>
+              <div id="dashboardTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="inventory">
+            <article class="panel">
+              <div class="panel-head panel-head-row">
+                <div>
+                  <h3>Inventario maestro</h3>
+                  <p>Un Código TIC representa un solo registro maestro. Las apariciones repetidas se conservan como historial.</p>
+                </div>
+                <div class="button-row">
+                  <button id="addAssetBtn" class="btn btn-primary">+ Agregar equipo</button>
+                  <button id="exportCsvBtn" class="btn btn-success">Exportar CSV</button>
+                  <button id="backupBtn" class="btn btn-soft">Copia JSON</button>
+                </div>
+              </div>
+
+              <div class="filters">
+                <div class="search-control"><span>⌕</span><input id="inventorySearch" placeholder="Buscar código, equipo, serie, responsable..."></div>
+                <select id="siteFilter"><option value="">Todas las sedes</option></select>
+                <select id="categoryFilter"><option value="">Todas las categorías</option></select>
+                <select id="statusFilter"><option value="">Todos los estados</option></select>
+                <select id="locationFilter">
+                  <option value="">Todas las ubicaciones</option>
+                  <option value="ASIGNADO">Asignado</option>
+                  <option value="ALMACEN">Almacén</option>
+                  <option value="SEDE">Sede / área</option>
+                </select>
+              </div>
+              <div id="inventoryTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="general">
+            <article class="panel">
+              <div class="panel-head"><h3>General / equipos administrativos</h3><p>Equipos y componentes asignados a Dirección, Subdirecciones, Secretarías, Coordinaciones y demás áreas administrativas.</p></div>
+              <div id="generalTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="sites">
+            <div class="panel-head stand-alone"><h3>Inventario por sedes</h3><p>Ingresa a una sede para filtrar automáticamente su inventario.</p></div>
+            <div id="siteCards" class="card-grid"></div>
+          </section>
+
+          <section class="view" data-view-panel="people">
+            <article class="panel">
+              <div class="panel-head panel-head-row">
+                <div><h3>Colaboradores y equipos a cargo</h3><p>La persona se registra una sola vez y se relaciona con sus equipos actuales.</p></div>
+                <div class="search-control compact"><span>⌕</span><input id="peopleSearch" placeholder="Nombre, DNI, sede o área"></div>
+              </div>
+              <div id="peopleCards" class="card-grid people-grid"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="warehouse">
+            <article class="panel">
+              <div class="panel-head"><h3>Almacén TIC</h3><p>Mover un equipo al almacén no crea otro Código TIC: solo actualiza su ubicación y agrega un movimiento al historial.</p></div>
+              <div id="warehouseTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="networks">
+            <article class="panel">
+              <div class="panel-head"><h3>Cámaras y redes</h3><p>Cámaras, NVR, DVR, routers, switches, access points y otros equipos de infraestructura.</p></div>
+              <div id="networkTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="materials">
+            <article class="panel">
+              <div class="panel-head"><h3>Insumos, materiales y herramientas</h3><p>Registros provenientes del control de materiales del área TIC.</p></div>
+              <div id="materialTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="movements">
+            <article class="panel">
+              <div class="panel-head panel-head-row">
+                <div><h3>Movimientos e historial</h3><p>Transferencias realizadas en la web y registros históricos provenientes de Compras, Ventas y Préstamos.</p></div>
+                <button id="exportMovementsBtn" class="btn btn-soft">Exportar movimientos</button>
+              </div>
+              <div id="movementTable"></div>
+            </article>
+          </section>
+
+          <section class="view" data-view-panel="reports">
+            <div class="report-grid">
+              <article class="panel"><div class="panel-head"><h3>Por sede</h3></div><div id="reportSites"></div></article>
+              <article class="panel"><div class="panel-head"><h3>Por componente</h3></div><div id="reportCategories"></div></article>
+              <article class="panel"><div class="panel-head"><h3>Por estado</h3></div><div id="reportStatuses"></div></article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <input id="excelInput" type="file" accept=".xlsx,.xls" hidden />
+  <input id="restoreInput" type="file" accept=".json" hidden />
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div><h3 id="modalTitle">Detalle</h3><p id="modalSubtitle"></p></div>
+        <button id="modalClose" class="icon-button">×</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toastHost" class="toast-host"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="branding.js"></script>
+  <script src="storage.js"></script>
+  <script src="excel-import.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

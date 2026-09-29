@@ -1,0 +1,9 @@
+{
+  "name": "Inventario TIC - Colegio Praxis",
+  "short_name": "Inventario Praxis",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0b2945",
+  "icons": []
+}

@@ -8,6 +8,7 @@
   let selectedId = null;
   let cloudMode = false;
   let currentProfile = null;
+  let realtimeChannel = null;
 
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -693,6 +694,13 @@
     const remote=await PraxisCloud.loadState();
     state=remote.state;
     if(state) await PraxisDB.set(STATE_KEY,state);
+    if(realtimeChannel) await PraxisCloud.unsubscribe(realtimeChannel);
+    realtimeChannel=PraxisCloud.subscribeState(async latest=>{
+      state=latest.state;
+      if(state) await PraxisDB.set(STATE_KEY,state);
+      renderAll();
+      toast("El inventario se actualizó desde otro usuario.","success");
+    });
     $("#authGate").classList.add("hidden");
     $("#appShell").classList.remove("hidden");
     updateProfileUI();
@@ -749,6 +757,7 @@
     if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
     if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
     if($("#logoutBtn")) $("#logoutBtn").onclick=async()=>{
+      if(realtimeChannel){await PraxisCloud.unsubscribe(realtimeChannel);realtimeChannel=null;}
       await PraxisCloud.signOut();
       state=null;currentProfile=null;
       showAuth("Sesión cerrada.","info");

@@ -89,6 +89,40 @@ const PraxisExcel = (() => {
     return out;
   }
 
+  function excelSerialFromDate(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return 0;
+
+    // Algunos libros conservan la fecha como número serial de Excel.
+    if (/^\d{4,5}(?:\.\d+)?$/.test(raw)) {
+      const n = Number(raw);
+      if (n >= 25000 && n <= 70000) return n;
+    }
+
+    // dd/mm/yyyy, dd-mm-yyyy o yyyy-mm-dd.
+    let m = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    let d, mo, y;
+    if (m) {
+      d = Number(m[1]); mo = Number(m[2]); y = Number(m[3]);
+    } else {
+      m = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+      if (m) { y = Number(m[1]); mo = Number(m[2]); d = Number(m[3]); }
+    }
+    if (y && y >= 1990 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      const ms = Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30);
+      return Math.floor(ms / 86400000);
+    }
+    return 0;
+  }
+
+  function latestDateScore(r) {
+    return Math.max(
+      excelSerialFromDate(r.fechaI),
+      excelSerialFromDate(r.fechaE),
+      excelSerialFromDate(r.fechaA)
+    );
+  }
+
   function chooseCurrent(records) {
     const score = r => {
       let s = SOURCE_PRIORITY[r.source] || 0;
@@ -97,7 +131,17 @@ const PraxisExcel = (() => {
       if (norm(r.estado).includes("OPERAT")) s += 3;
       return s;
     };
-    return [...records].sort((a,b) => score(b)-score(a))[0];
+
+    // Primero usamos la fecha más reciente cuando existe una diferencia real.
+    // Esto evita que un equipo devuelto al almacén quede asignado a una ubicación antigua
+    // solo por la prioridad de la hoja. Los conflictos siguen marcados para revisión manual.
+    return [...records].sort((a,b) => {
+      const da = latestDateScore(a), db = latestDateScore(b);
+      if (da && db && da !== db) return db - da;
+      if (db && !da) return 1;
+      if (da && !db) return -1;
+      return score(b) - score(a);
+    })[0];
   }
 
   function locationType(r) {
@@ -145,6 +189,13 @@ const PraxisExcel = (() => {
       r.locationType = locationType(r);
       r.needsReview = locationVariants.length > 1;
       r.conflictLocations = locationVariants;
+      r.conflictRecords = records.map(x => ({
+        source:x.source, row:x.row, sede:x.sede, area:x.area,
+        responsable:x.responsable, dni:x.dni, estado:x.estado,
+        condicion:x.condicion, situacion:x.situacion,
+        fecha:x.fechaI || x.fechaE || x.fechaA || "",
+        observaciones:x.observaciones || ""
+      }));
       r.history = historyByCode.get(code) || [];
       inventory.push(r);
     }
@@ -153,6 +204,9 @@ const PraxisExcel = (() => {
       r.id = `SIN-${r.source.replace(/\W+/g,"-")}-${r.row}`;
       r.duplicateSources = 1;
       r.locationType = locationType(r);
+      r.needsReview = false;
+      r.conflictLocations = [];
+      r.conflictRecords = [];
       r.history = [{
         type:"EXCEL", source:r.source, row:r.row, sede:r.sede, area:r.area,
         responsable:r.responsable, estado:r.estado,

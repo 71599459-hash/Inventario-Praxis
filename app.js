@@ -550,15 +550,13 @@
         <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
       </div>
       <div class="modal-actions">
-        <button id="printCargoInitial" class="btn btn-primary">Imprimir entrega inicial</button>
-        <button id="printCargoFinal" class="btn btn-warning">Imprimir revisión final</button>
+        <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
         <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
       </div>
-      <div class="alert info"><b>Ficha técnica de cargo:</b> todos los componentes asignados aparecerán automáticamente con sus datos, fecha actual y espacio de firma por cada componente.</div>
+      <div class="alert info"><b>Ficha técnica de cargo:</b> se imprime una sola hoja con la <b>Revisión Inicial</b> fechada y la <b>Revisión Final</b> en blanco. Esa misma hoja física se conserva y se completa al finalizar la entrega.</div>
       <h4 class="section-title">Equipos a cargo</h4>${tableHtml(items,false)}
     `);
-    $("#printCargoInitial").onclick=()=>printCargo(p,"INICIAL");
-    $("#printCargoFinal").onclick=()=>printCargo(p,"FINAL");
+    $("#printCargo").onclick=()=>printCargo(p);
     $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.name;page=1;renderInventory()};
     wireTables();
   }
@@ -607,6 +605,12 @@
       }));
   }
 
+  function cargoFingerprint(items){
+    return (items||[]).map(r=>[
+      r.id||"",r.codigo||"",r.serie||"",r.equipo||"",r.estado||""
+    ].join("|")).join("||");
+  }
+
   function cargoItemType(r){
     if(r.bien) return r.bien;
     const e=norm(r.equipo);
@@ -653,61 +657,58 @@
     </div>`;
   }
 
-  async function printCargo(p,stage="INICIAL") {
+  async function printCargo(p) {
     if(!ensureEditable()) return;
+
     state.cargoDocuments=state.cargoDocuments||[];
     const key=cargoPersonKey(p);
-    const personDocs=state.cargoDocuments.filter(d=>d.personKey===key);
-    let doc=stage==="FINAL"
-      ? ([...personDocs].reverse().find(d=>!d.finalDate) || personDocs[personDocs.length-1])
-      : [...personDocs].reverse().find(d=>!d.finalDate);
+    const snap=cargoSnapshot(p.items);
+    const fingerprint=cargoFingerprint(snap);
+    const currentDate=today();
 
-    if(stage==="INICIAL"){
-      if(!doc){
-        doc={
-          id:crypto.randomUUID(),
-          code:nextCargoCode(),
-          personKey:key,
-          personName:p.name,
-          dni:p.dni||"",
-          sede:[...p.sites].join(", "),
-          area:[...p.areas].join(", "),
-          situacion:"INTERNO",
-          initialDate:today(),
-          finalDate:"",
-          items:cargoSnapshot(p.items),
-          createdBy:currentProfile?.id||"",
-          createdByName:currentProfile?.nombre||currentProfile?.email||"",
-          createdAt:new Date().toISOString()
-        };
-        state.cargoDocuments.push(doc);
-        await persist("IMPRIMIR_CARGO_INICIAL");
-      }
-    }else{
-      if(!doc){
-        toast("No existe una entrega inicial para este colaborador. Primero imprime la entrega inicial.","error");
-        return;
-      }
-      if(!doc.finalDate){
-        doc.finalDate=today();
-        doc.finalBy=currentProfile?.id||"";
-        doc.finalByName=currentProfile?.nombre||currentProfile?.email||"";
-        doc.finalAt=new Date().toISOString();
-        await persist("IMPRIMIR_CARGO_FINAL");
-      }
+    // Reimpresión segura: si hoy ya se generó exactamente el mismo cargo,
+    // reutiliza el mismo código FTEC en lugar de crear otro.
+    let doc=[...state.cargoDocuments].reverse().find(d=>
+      d.personKey===key &&
+      d.initialDate===currentDate &&
+      cargoFingerprint(d.items||[])===fingerprint
+    );
+
+    if(!doc){
+      doc={
+        id:crypto.randomUUID(),
+        code:nextCargoCode(),
+        personKey:key,
+        personName:p.name,
+        dni:p.dni||"",
+        sede:[...p.sites].join(", "),
+        area:[...p.areas].join(", "),
+        situacion:"INTERNO",
+        initialDate:currentDate,
+        finalDate:"",
+        itemFingerprint:fingerprint,
+        items:snap,
+        createdBy:currentProfile?.id||"",
+        createdByName:currentProfile?.nombre||currentProfile?.email||"",
+        createdAt:new Date().toISOString()
+      };
+      state.cargoDocuments.push(doc);
+      await persist("IMPRIMIR_CARGO");
     }
 
     const technician=(currentProfile?.nombre||"CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO").toUpperCase();
-    const rowDate=stage==="FINAL"?(doc.finalDate||today()):doc.initialDate;
     const items=doc.items||[];
     const pageSize=25;
     const pages=[];
-    for(let i=0;i<Math.max(1,Math.ceil(items.length/pageSize));i++)pages.push(items.slice(i*pageSize,(i+1)*pageSize));
+    for(let i=0;i<Math.max(1,Math.ceil(items.length/pageSize));i++){
+      pages.push(items.slice(i*pageSize,(i+1)*pageSize));
+    }
 
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
     const pageHtml=pages.map((pageItems,pageIndex)=>{
       const globalStart=pageIndex*pageSize;
       const rows=[];
+
       for(let i=0;i<pageSize;i++){
         const r=pageItems[i];
         if(r){
@@ -722,13 +723,16 @@
             <td>${esc(r.caracteristicas)}</td>
             <td>${esc(codeSerie||"SIN CÓDIGO")}</td>
             <td>${esc(r.estado)}</td>
-            <td class="nowrap">${esc(cargoDate(rowDate))}</td>
+            <td class="nowrap">${esc(cargoDate(doc.initialDate))}</td>
             <td class="sign-row"></td>
             <td class="sign-row"></td>
             <td>${esc(r.observaciones)}</td>
           </tr>`);
         }else{
-          rows.push(`<tr><td class="num">${globalStart+i+1}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="sign-row"></td><td class="sign-row"></td><td></td></tr>`);
+          rows.push(`<tr>
+            <td class="num">${globalStart+i+1}</td><td></td><td></td><td></td><td></td><td></td>
+            <td></td><td></td><td></td><td class="sign-row"></td><td class="sign-row"></td><td></td>
+          </tr>`);
         }
       }
 
@@ -737,7 +741,7 @@
         ${cargoSoftwareHtml()}
         <div class="revision-grid">
           ${revisionBox("REVISIÓN INICIAL",doc.initialDate,technician,TIC_HEAD_NAME,"")}
-          ${revisionBox("REVISIÓN FINAL",doc.finalDate,technician,TIC_HEAD_NAME,"")}
+          ${revisionBox("REVISIÓN FINAL","",technician,TIC_HEAD_NAME,"")}
         </div>`:"";
 
       return `<section class="print-page">
@@ -750,39 +754,91 @@
           <div><b>Área:</b><span>${esc(doc.area||"")}</span></div>
           <div class="meta-user"><b>Usuario:</b><span>${esc(doc.personName)}${doc.dni?" · DNI: "+esc(doc.dni):""}</span><img src="${logo}"></div>
         </div>
+
         <div class="section-label">HARDWARE</div>
-        <table class="hardware-table"><thead><tr>
-          <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
-          <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma (R.C.)</th><th>Firma TIC</th><th>Observación</th>
-        </tr></thead><tbody>${rows.join("")}</tbody></table>
+        <table class="hardware-table">
+          <thead><tr>
+            <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
+            <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma (R.C.)</th><th>Firma TIC</th><th>Observación</th>
+          </tr></thead>
+          <tbody>${rows.join("")}</tbody>
+        </table>
+
         ${reviews}
-        <div class="page-counter">Página ${pageIndex+1} de ${pages.length} · ${esc(stage==="FINAL"?"REVISIÓN FINAL":"ENTREGA INICIAL")}</div>
+        <div class="page-counter">Página ${pageIndex+1} de ${pages.length} · CARGO DE EQUIPOS TIC</div>
       </section>`;
     }).join("");
 
     const w=window.open("","_blank");
-    if(!w){toast("El navegador bloqueó la ventana de impresión. Habilita ventanas emergentes para esta página.","error");return;}
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(doc.code)} - ${esc(doc.personName)}</title><style>
-      @page{size:A4 landscape;margin:6mm}
-      *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;background:#fff}
-      .print-page{width:100%;min-height:196mm;position:relative;page-break-after:always;padding-bottom:4mm}
-      .print-page:last-child{page-break-after:auto}.doc-title{text-align:center;border:1px solid #222;font-weight:800;font-size:11pt;padding:3px;margin-bottom:2px}
-      .doc-meta{display:grid;grid-template-columns:1fr 1fr 2.2fr;border-left:1px solid #222;border-top:1px solid #222;font-size:7.4pt}
-      .doc-meta>div{display:flex;min-height:18px;border-right:1px solid #222;border-bottom:1px solid #222;align-items:center}.doc-meta b{width:58px;text-align:right;padding-right:5px}.doc-meta span{flex:1;padding:2px 4px;font-weight:600}
-      .meta-user{position:relative;padding-right:92px}.meta-user img{position:absolute;right:7px;top:1px;height:31px;width:80px;object-fit:contain}
-      .section-label{font-size:7.5pt;font-weight:800;margin-top:2px}
-      table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #222;padding:1.4px 2px;vertical-align:middle;overflow-wrap:anywhere}
-      th{font-size:6.6pt;background:#f3f3f3;text-align:center}.hardware-table td{font-size:6.25pt;height:16px}.hardware-table th:nth-child(1){width:3%}.hardware-table th:nth-child(2){width:3%}.hardware-table th:nth-child(3){width:8%}.hardware-table th:nth-child(4){width:7%}.hardware-table th:nth-child(5){width:11%}.hardware-table th:nth-child(6){width:18%}.hardware-table th:nth-child(7){width:13%}.hardware-table th:nth-child(8){width:7%}.hardware-table th:nth-child(9){width:7%}.hardware-table th:nth-child(10){width:8%}.hardware-table th:nth-child(11){width:6%}.hardware-table th:nth-child(12){width:9%}
-      .num{text-align:center}.nowrap{white-space:nowrap}.sign-row{height:18px}
-      .software-table td{font-size:6.1pt;height:14px}.software-table th:nth-child(4n+1){width:3%}.software-table th:nth-child(4n+2){width:9%}.software-table th:nth-child(4n+3){width:9%}.software-table th:nth-child(4n+4){width:12%}
-      .revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:18mm;margin-top:6mm}.revision-box{border:1px solid #222;font-size:6.6pt}.revision-title{text-align:center;font-weight:800;border-bottom:1px solid #222;padding:2px}
-      .revision-date{display:grid;grid-template-columns:40% 60%;border-bottom:1px solid #222;min-height:18px;align-items:center;text-align:center}.revision-date b{border-right:1px solid #222;height:100%;display:grid;place-items:center}
-      .revision-observation{min-height:34px;border-bottom:1px solid #222;text-align:center;display:grid;grid-template-rows:14px 1fr}.revision-observation b{border-bottom:1px solid #222}.revision-observation span{padding:2px}
-      .revision-signatures{display:grid;grid-template-columns:1fr 1fr}.signature-cell{text-align:center;border-right:1px solid #222}.signature-cell:last-child{border-right:0}.signature-space{height:38px;border-bottom:1px solid #222}.signature-cell b{display:block;padding:2px}
-      .revision-names{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #222}.revision-names>div{text-align:center;border-right:1px solid #222}.revision-names>div:last-child{border-right:0}.revision-names span{display:block;min-height:17px;padding:2px;border-bottom:1px solid #222}.revision-names b{display:block;padding:2px}
-      .page-counter{text-align:right;font-size:6pt;margin-top:2px;color:#555}
-      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-    </style></head><body>${pageHtml}<script>window.onload=()=>setTimeout(()=>window.print(),350)<\/script></body></html>`);
+    if(!w){
+      toast("El navegador bloqueó la ventana de impresión. Habilita ventanas emergentes para esta página.","error");
+      return;
+    }
+
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+      <title>${esc(doc.code)} - ${esc(doc.personName)}</title>
+      <style>
+        @page{size:A4 landscape;margin:3mm}
+        *{box-sizing:border-box}
+        html,body{margin:0;padding:0}
+        body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}
+        .print-page{width:100%;page-break-after:always;break-after:page;position:relative}
+        .print-page:last-child{page-break-after:auto;break-after:auto}
+
+        .doc-title{height:7mm;display:grid;place-items:center;border:1px solid #222;font-weight:800;font-size:9pt;padding:1px}
+        .doc-meta{display:grid;grid-template-columns:1fr 1fr 2.1fr;border-left:1px solid #222;border-top:1px solid #222;font-size:6pt}
+        .doc-meta>div{display:flex;min-height:5mm;border-right:1px solid #222;border-bottom:1px solid #222;align-items:center}
+        .doc-meta b{width:49px;text-align:right;padding-right:3px}
+        .doc-meta span{flex:1;padding:1px 3px;font-weight:600}
+        .meta-user{position:relative;padding-right:73px}
+        .meta-user img{position:absolute;right:4px;top:1px;height:9mm;width:66px;object-fit:contain}
+
+        .section-label{font-size:6pt;font-weight:800;line-height:3.2mm}
+        table{width:100%;border-collapse:collapse;table-layout:fixed}
+        th,td{border:1px solid #222;padding:.6px 1.5px;vertical-align:middle;overflow-wrap:anywhere;line-height:1.05}
+        th{font-size:5.3pt;background:#eee;text-align:center;font-weight:800}
+        .hardware-table td{font-size:5.15pt;height:3.75mm}
+        .hardware-table th{height:4.2mm}
+        .hardware-table th:nth-child(1){width:3%}.hardware-table th:nth-child(2){width:3%}
+        .hardware-table th:nth-child(3){width:8%}.hardware-table th:nth-child(4){width:7%}
+        .hardware-table th:nth-child(5){width:11%}.hardware-table th:nth-child(6){width:18%}
+        .hardware-table th:nth-child(7){width:13%}.hardware-table th:nth-child(8){width:7%}
+        .hardware-table th:nth-child(9){width:7%}.hardware-table th:nth-child(10){width:8%}
+        .hardware-table th:nth-child(11){width:6%}.hardware-table th:nth-child(12){width:9%}
+        .num{text-align:center}.nowrap{white-space:nowrap}.sign-row{height:3.75mm}
+
+        .software-table th{font-size:5pt;height:3.5mm}
+        .software-table td{font-size:4.9pt;height:3.25mm}
+        .software-table th:nth-child(4n+1){width:3%}
+        .software-table th:nth-child(4n+2){width:9%}
+        .software-table th:nth-child(4n+3){width:9%}
+        .software-table th:nth-child(4n+4){width:12%}
+
+        .revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:2mm;break-inside:avoid}
+        .revision-box{border:1px solid #222;font-size:5.2pt;break-inside:avoid}
+        .revision-title{text-align:center;font-weight:800;background:#eee;border-bottom:1px solid #222;padding:1px;line-height:3.2mm}
+        .revision-date{display:grid;grid-template-columns:40% 60%;border-bottom:1px solid #222;min-height:4mm;align-items:center;text-align:center}
+        .revision-date b{border-right:1px solid #222;height:100%;display:grid;place-items:center}
+        .revision-observation{min-height:8mm;border-bottom:1px solid #222;text-align:center;display:grid;grid-template-rows:3.2mm 1fr}
+        .revision-observation b{background:#eee;border-bottom:1px solid #222}
+        .revision-observation span{padding:1px}
+        .revision-signatures{display:grid;grid-template-columns:1fr 1fr}
+        .signature-cell{text-align:center;border-right:1px solid #222}.signature-cell:last-child{border-right:0}
+        .signature-space{height:7mm;border-bottom:1px solid #222}
+        .signature-cell b{display:block;padding:1px}
+        .revision-names{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #222}
+        .revision-names>div{text-align:center;border-right:1px solid #222}.revision-names>div:last-child{border-right:0}
+        .revision-names span{display:block;min-height:3.6mm;padding:1px;border-bottom:1px solid #222}
+        .revision-names b{display:block;padding:1px}
+        .page-counter{text-align:right;font-size:4.8pt;margin-top:1mm;color:#555}
+
+        @media print{
+          body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        }
+      </style>
+    </head><body>${pageHtml}
+      <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
+    </body></html>`);
     w.document.close();
   }
 
@@ -961,15 +1017,12 @@
         MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
         RESOLVER_CONFLICTO:"Resolución de conflicto",
         RESTAURAR_BACKUP:"Restauración de copia",
-        IMPRIMIR_CARGO_INICIAL:"Ficha técnica - entrega inicial",
-        IMPRIMIR_CARGO_FINAL:"Ficha técnica - revisión final",
+        IMPRIMIR_CARGO:"Ficha técnica · cargo de equipos",
         CAMBIAR_ROL:"Cambio de rol",
         AUTORIZAR_USUARIO:"Autorización de personal",
         DESAUTORIZAR_USUARIO:"Retiro de acceso",
         BOOTSTRAP_ADMIN:"Alta del primer Administrador TIC",
-        IMPRIMIR_CARGO_INICIAL:"Ficha técnica · entrega inicial",
-        IMPRIMIR_CARGO_FINAL:"Ficha técnica · revisión final"
-      }[action]||action||"Evento");
+        }[action]||action||"Evento");
 
       const rows=items.map(a=>{
         const u=userMap.get(a.user_id);

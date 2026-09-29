@@ -1040,6 +1040,20 @@
     }
   }
 
+  function showLogin(message="",type="info") {
+    $("#loginForm").classList.remove("hidden");
+    $("#registerForm").classList.add("hidden");
+    $("#authSubtitle").textContent="Acceso institucional al inventario centralizado.";
+    showAuth(message,type);
+  }
+
+  function showRegister(message="",type="info") {
+    $("#loginForm").classList.add("hidden");
+    $("#registerForm").classList.remove("hidden");
+    $("#authSubtitle").textContent="Registro de acceso al sistema.";
+    showAuth(message,type);
+  }
+
   function demoInfo() {
     showModal("Cómo funciona","Diseñado para tu flujo de trabajo de Colegio Praxis.",`
       <div class="alert info">El sistema procesa las hojas <b>General, TIC - Almacén, Cámaras y Redes, Insum, mat y herra, Compras, Ventas y Préstamos</b>.</div>
@@ -1082,7 +1096,7 @@
       if(realtimeChannel){await PraxisCloud.unsubscribe(realtimeChannel);realtimeChannel=null;}
       await PraxisCloud.signOut();
       state=null;currentProfile=null;
-      showAuth("Sesión cerrada correctamente.","info");
+      showLogin("Sesión cerrada correctamente.","info");
     };
     if($("#logoutBtn")) $("#logoutBtn").onclick=doLogout;
     if($("#logoutSidebarBtn")) $("#logoutSidebarBtn").onclick=doLogout;
@@ -1098,24 +1112,52 @@
       renderInventory();
     });
 
-    if($("#signupBtn")) $("#signupBtn").onclick=async()=>{
-      const nombre=$("#loginName").value.trim();
-      const email=$("#loginEmail").value.trim();
-      const password=$("#loginPassword").value;
-      if(!email || !password){
-        showAuth("Ingresa correo institucional y una contraseña de al menos 8 caracteres.","error");
+    if($("#showRegisterBtn")) $("#showRegisterBtn").onclick=()=>{
+      $("#regEmail").value=PraxisCloud.normalizeInstitutionalEmail($("#loginEmail").value||"");
+      showRegister();
+      setTimeout(()=>$("#regName").focus(),50);
+    };
+
+    if($("#backToLoginBtn")) $("#backToLoginBtn").onclick=()=>{
+      const email=$("#regEmail").value.trim();
+      if(email) $("#loginEmail").value=email.replace(/@praxis\.edu\.pe$/i,"");
+      showLogin();
+    };
+
+    if($("#registerForm")) $("#registerForm").onsubmit=async e=>{
+      e.preventDefault();
+      const nombre=$("#regName").value.trim();
+      const dni=$("#regDni").value.trim();
+      const cargo=$("#regCargo").value.trim();
+      const sede=$("#regSede").value.trim();
+      const area=$("#regArea").value.trim();
+      const email=$("#regEmail").value.trim();
+      const password=$("#regPassword").value;
+      const confirmPassword=$("#regPassword2").value;
+
+      if(password!==confirmPassword){
+        showRegister("Las contraseñas no coinciden.","error");
         return;
       }
+
+      const button=$("#registerForm button[type='submit']");
+      const previous=button.textContent;
+      button.disabled=true;
+      button.textContent="Creando acceso…";
       try{
-        const data=await PraxisCloud.signUp(email,password,nombre);
+        const data=await PraxisCloud.signUp({email,password,nombre,dni,cargo,sede,area});
         if(data?.session){
           await enterCloudApp();
         }else{
-          showAuth("Cuenta creada. Revisa tu correo institucional para confirmar el registro y luego inicia sesión.","info");
+          $("#loginEmail").value=PraxisCloud.normalizeInstitutionalEmail(email).replace(/@praxis\.edu\.pe$/i,"");
+          showLogin("Acceso creado. Revisa tu correo institucional para confirmar la cuenta y luego inicia sesión.","info");
         }
       }catch(err){
         console.error(err);
-        showAuth((err&&err.message)||"No se pudo crear la cuenta.","error");
+        showRegister((err&&err.message)||"No se pudo crear el acceso.","error");
+      }finally{
+        button.disabled=false;
+        button.textContent=previous;
       }
     };
 
@@ -1139,7 +1181,7 @@
       try {
         const session=await PraxisCloud.getSession();
         if(session) await enterCloudApp();
-        else showAuth();
+        else showLogin();
       } catch(err) {
         console.error(err);
         showAuth((err&&err.message)||"No se pudo conectar con la base de datos.","error");

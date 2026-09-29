@@ -137,9 +137,14 @@ const PraxisExcel = (() => {
     const inventory = [];
     for (const [code, records] of groups.entries()) {
       const r = structuredClone(chooseCurrent(records));
+      const locationVariants = [...new Set(records.map(x =>
+        [x.sede, x.area, x.responsable].map(norm).filter(Boolean).join(" | ")
+      ).filter(Boolean))];
       r.id = code;
       r.duplicateSources = records.length;
       r.locationType = locationType(r);
+      r.needsReview = locationVariants.length > 1;
+      r.conflictLocations = locationVariants;
       r.history = historyByCode.get(code) || [];
       inventory.push(r);
     }
@@ -166,11 +171,17 @@ const PraxisExcel = (() => {
       }));
 
     const duplicates = [...groups.values()].filter(v => v.length > 1).length;
+    const conflicts = inventory.filter(r => r.needsReview).length;
     return {
       version:2,
       importedAt:new Date().toISOString(),
       workbookSheets:workbook.SheetNames,
-      stats:{ rawRecords:allRecords.length, masterRecords:inventory.length, duplicateCodes:duplicates },
+      stats:{
+        rawRecords:allRecords.length,
+        masterRecords:inventory.length,
+        duplicateCodes:duplicates,
+        conflictCodes:conflicts
+      },
       inventory,
       transactions,
       webMovements:[]

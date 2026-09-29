@@ -89,9 +89,9 @@
     if ($("#profileRole")) $("#profileRole").textContent = displayRole;
     if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = displayName;
     if ($("#sidebarProfileRole")) $("#sidebarProfileRole").textContent = displayRole;
-    $(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
-    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
-    $(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
+    $$(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
+    $$(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
+    $$(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 
   function groupCount(arr, getter) {
@@ -124,7 +124,7 @@
   function setView(view) {
     currentView = view;
     $$(".view").forEach(v => v.classList.toggle("active", v.dataset.viewPanel === view));
-    $(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    $$(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     const titles = {
       dashboard:["Inventario TIC","Gestión de equipos tecnológicos"],
       inventory:["Inventario maestro","Búsqueda, edición y control del Código TIC"],
@@ -749,7 +749,7 @@
         <div class="section-label">HARDWARE</div>
         <table class="hardware-table"><thead><tr>
           <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
-          <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma Usuario</th><th>Firma TIC</th><th>Observación</th>
+          <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma (R.C.)</th><th>Firma TIC</th><th>Observación</th>
         </tr></thead><tbody>${rows.join("")}</tbody></table>
         ${reviews}
         <div class="page-counter">Página ${pageIndex+1} de ${pages.length} · ${esc(stage==="FINAL"?"REVISIÓN FINAL":"ENTREGA INICIAL")}</div>
@@ -1050,7 +1050,7 @@
   async function init() {
     cloudMode=PraxisCloud.configured();
 
-    $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+    $$$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
     $("#modalClose").onclick=closeModal;

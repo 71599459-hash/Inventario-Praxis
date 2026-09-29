@@ -57,8 +57,19 @@
         <button class="nav-item" data-view="movements"><span>⇄</span> Movimientos</button>
         <button class="nav-item" data-view="review"><span>⚠</span> Revisión</button>
         <button class="nav-item" data-view="reports"><span>▥</span> Reportes</button>
-        <button class="nav-item admin-only hidden" data-view="users"><span>♙</span> Usuarios y roles</button>
+        <button class="nav-item admin-only hidden" data-view="users"><span>♙</span> Personal autorizado</button>
       </nav>
+
+      <div class="sidebar-account cloud-only hidden">
+        <div class="sidebar-account-head">
+          <span class="avatar">TIC</span>
+          <div>
+            <b id="sidebarProfileName">Usuario</b>
+            <small id="sidebarProfileRole">Consulta</small>
+          </div>
+        </div>
+        <button id="logoutSidebarBtn" class="sidebar-logout" type="button">Cerrar sesión</button>
+      </div>
 
       <div class="school-photo">
         <img data-brand-school alt="Sede Centro Colegio Praxis" />
@@ -87,7 +98,7 @@
             <span class="avatar">TIC</span>
             <div><b id="profileName">Usuario</b><small id="profileRole">Consulta</small></div>
           </div>
-          <button id="logoutBtn" class="btn btn-soft cloud-only hidden">Salir</button>
+          <button id="logoutBtn" class="btn btn-soft cloud-only hidden">Cerrar sesión</button>
         </div>
       </header>
 
@@ -258,20 +269,38 @@
             <article class="panel">
               <div class="panel-head panel-head-row">
                 <div>
-                  <h3>Usuarios y roles</h3>
-                  <p>Solo Administrador TIC puede cambiar permisos. Los usuarios se crean desde Supabase Auth y aparecen aquí al iniciar sesión por primera vez.</p>
+                  <h3>Personal autorizado</h3>
+                  <p>Control de acceso al Inventario TIC del Colegio Praxis. Las cuentas nuevas quedan pendientes hasta que un Administrador TIC las autorice.</p>
                 </div>
-                <button id="refreshUsersBtn" class="btn btn-soft">Actualizar usuarios</button>
+                <button id="refreshUsersBtn" class="btn btn-soft">Actualizar personal</button>
               </div>
+
+              <div id="authorizedSummary" class="quality-grid" style="margin-bottom:14px"></div>
+
+              <div class="filters users-filters">
+                <div class="search-control"><span>⌕</span><input id="authorizedSearch" placeholder="Buscar por nombre, correo o rol"></div>
+                <select id="authorizedStatus">
+                  <option value="">Todos los estados</option>
+                  <option value="ACTIVO">Autorizados</option>
+                  <option value="PENDIENTE">Pendientes / desautorizados</option>
+                </select>
+                <select id="authorizedRole">
+                  <option value="">Todos los roles</option>
+                  <option value="ADMIN_TIC">Administrador TIC</option>
+                  <option value="EDITOR">Editor</option>
+                  <option value="CONSULTA">Consulta</option>
+                </select>
+              </div>
+
               <div class="alert info">
-                <b>Roles:</b> ADMIN_TIC puede administrar y editar; EDITOR puede actualizar el inventario; CONSULTA solo visualiza.
+                <b>Permisos:</b> Administrador TIC administra usuarios y el inventario; Editor actualiza el inventario; Consulta solo visualiza. Una cuenta pendiente no puede acceder a los datos.
               </div>
               <div id="usersTable"></div>
             </article>
 
             <article class="panel" style="margin-top:14px">
               <div class="panel-head panel-head-row">
-                <div><h3>Auditoría central</h3><p>Últimas actualizaciones guardadas en la base de datos.</p></div>
+                <div><h3>Auditoría central</h3><p>Registro de cambios del inventario, autorizaciones y cambios de rol.</p></div>
                 <button id="refreshAuditBtn" class="btn btn-soft">Actualizar auditoría</button>
               </div>
               <div id="auditTable"></div>

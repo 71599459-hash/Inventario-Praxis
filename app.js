@@ -188,7 +188,7 @@
   }
 
   function renderGeneral() {
-    const rows=activeInventory().filter(r=>r.source==="General" || (r.responsable && !["TIC - Almacén","Cámaras y Redes","Insum, mat y herra"].includes(r.source)));
+    const rows=activeInventory().filter(r=>r.source==="General");
     $("#generalTable").innerHTML=tableHtml(rows,false); wireTables();
   }
 

@@ -756,11 +756,39 @@
   async function renderAudit() {
     if(!isAdmin() || !$("#auditTable")) return;
     try {
-      const items=await PraxisCloud.audit(100);
-      const rows=items.map(function(a){
-        return "<tr><td>"+esc(new Date(a.created_at).toLocaleString("es-PE"))+"</td><td>"+esc(a.action)+"</td><td>"+esc(a.user_id||"")+"</td><td>"+esc(a.version_before==null?"":a.version_before)+"</td><td>"+esc(a.version_after==null?"":a.version_after)+"</td></tr>";
+      const [items,users]=await Promise.all([PraxisCloud.audit(100),PraxisCloud.listUsers()]);
+      const userMap=new Map(users.map(u=>[u.id,u]));
+      const actionLabel=action=>({
+        IMPORTAR_EXCEL:"Importación de Excel",
+        ALTA_EQUIPO:"Alta de equipo",
+        EDITAR_FICHA:"Edición de ficha",
+        MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
+        RESOLVER_CONFLICTO:"Resolución de conflicto",
+        RESTAURAR_BACKUP:"Restauración de copia",
+        CAMBIAR_ROL:"Cambio de rol",
+        AUTORIZAR_USUARIO:"Autorización de personal",
+        DESAUTORIZAR_USUARIO:"Retiro de acceso",
+        BOOTSTRAP_ADMIN:"Alta del primer Administrador TIC"
+      }[action]||action||"Evento");
+
+      const rows=items.map(a=>{
+        const u=userMap.get(a.user_id);
+        const person=u?(u.nombre||u.email):a.user_id||"Sistema";
+        const summary=a.summary||{};
+        const detail=[
+          summary.fileName,
+          summary.masterRecords!=null?summary.masterRecords+" registros":null,
+          summary.new_role?"Rol: "+summary.new_role:null
+        ].filter(Boolean).join(" · ");
+        return `<tr>
+          <td>${esc(fmtDateTime(a.created_at))}</td>
+          <td><b>${esc(actionLabel(a.action))}</b>${detail?'<div class="muted">'+esc(detail)+'</div>':""}</td>
+          <td>${esc(person)}</td>
+          <td>${esc(a.version_before==null?"—":a.version_before)}</td>
+          <td>${esc(a.version_after==null?"—":a.version_after)}</td>
+        </tr>`;
       }).join("");
-      $("#auditTable").innerHTML="<div class='table-wrap'><table><thead><tr><th>Fecha</th><th>Acción</th><th>Usuario</th><th>Versión anterior</th><th>Nueva versión</th></tr></thead><tbody>"+(rows||"<tr><td colspan='5'>Sin eventos.</td></tr>")+"</tbody></table></div>";
+      $("#auditTable").innerHTML=`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Acción</th><th>Realizado por</th><th>Versión anterior</th><th>Nueva versión</th></tr></thead><tbody>${rows||'<tr><td colspan="5">Sin eventos de auditoría.</td></tr>'}</tbody></table></div>`;
     } catch(err) {
       console.error(err);
       $("#auditTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudo cargar la auditoría.")+"</div>";

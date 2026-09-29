@@ -545,51 +545,236 @@
         <div class="detail-field"><span>Sede(s)</span><b>${esc([...p.sites].join(", ")||"—")}</b></div>
         <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
       </div>
-      <div class="modal-actions"><button id="printCargo" class="btn btn-primary">Imprimir acta de cargo</button><button id="filterPerson" class="btn btn-soft">Ver en inventario</button></div>
+      <div class="modal-actions">
+        <button id="printCargoInitial" class="btn btn-primary">Imprimir entrega inicial</button>
+        <button id="printCargoFinal" class="btn btn-warning">Imprimir revisión final</button>
+        <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
+      </div>
+      <div class="alert info"><b>Ficha técnica de cargo:</b> todos los componentes asignados aparecerán automáticamente con sus datos, fecha actual y espacio de firma por cada componente.</div>
       <h4 class="section-title">Equipos a cargo</h4>${tableHtml(items,false)}
     `);
-    $("#printCargo").onclick=()=>printCargo(p);
+    $("#printCargoInitial").onclick=()=>printCargo(p,"INICIAL");
+    $("#printCargoFinal").onclick=()=>printCargo(p,"FINAL");
     $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.name;page=1;renderInventory()};
     wireTables();
   }
 
-  function printCargo(p) {
-    const rows=p.items.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.codigo||"SIN CÓDIGO")}</td><td>${esc(r.equipo)}</td><td>${esc(r.marca)}</td><td>${esc(r.modelo)}</td><td>${esc(r.serie)}</td><td>${esc(r.estado)}</td></tr>`).join("");
-    const w=window.open("","_blank");
-    w.document.write(`<!doctype html><html><head><title>Acta de Cargo</title><style>body{font-family:Arial;padding:30px;color:#10243d}.head{display:flex;align-items:center;gap:20px;border-bottom:3px solid #f7961f;padding-bottom:14px}.head img{width:170px}h1{font-size:20px}table{border-collapse:collapse;width:100%;font-size:11px;margin-top:18px}th,td{border:1px solid #bbb;padding:7px;text-align:left}.sign{display:grid;grid-template-columns:1fr 1fr;gap:80px;margin-top:70px;text-align:center}.line{border-top:1px solid #333;padding-top:8px}</style></head><body><div class="head"><img src="${document.querySelector(".brand img").src}"><div><h1>ACTA DE CARGO DE EQUIPOS TIC</h1><b>Colegio Praxis</b></div></div><p><b>Responsable:</b> ${esc(p.name)}<br><b>DNI:</b> ${esc(p.dni||"—")}<br><b>Sede:</b> ${esc([...p.sites].join(", "))}<br><b>Fecha:</b> ${today()}</p><table><thead><tr><th>N°</th><th>Código TIC</th><th>Equipo</th><th>Marca</th><th>Modelo</th><th>Serie</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table><div class="sign"><div class="line">Firma del colaborador</div><div class="line">Área TIC</div></div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
-    w.document.close();
+  const TIC_HEAD_NAME="FABIÁN PUENTE, FRANK JAIME";
+  const CARGO_BASE_SEQUENCE=16;
+
+  function cargoDate(value){
+    const d=value?new Date(value+"T12:00:00"):new Date();
+    if(Number.isNaN(d.getTime())) return value||"";
+    return d.toLocaleDateString("es-PE",{day:"2-digit",month:"2-digit",year:"numeric"});
   }
 
-  function openAddAsset() {
-    if(!ensureEditable()) return;
-    showModal("Agregar equipo","El Código TIC no puede repetirse.",`
-      <div id="formAlert"></div>
-      <div class="form-grid">
-        <div class="form-field"><label>Código TIC *</label><input id="aCode" placeholder="Ej. MON-000100"></div>
-        <div class="form-field"><label>Equipo / material *</label><input id="aEquipment"></div>
-        <div class="form-field"><label>Sede</label><input id="aSite"></div>
-        <div class="form-field"><label>Área / aula</label><input id="aArea"></div>
-        <div class="form-field full"><label>Responsable</label><input id="aPerson"></div>
-        <div class="form-field"><label>Marca</label><input id="aBrand"></div>
-        <div class="form-field"><label>Modelo</label><input id="aModel"></div>
-        <div class="form-field"><label>Serie</label><input id="aSerial"></div>
-        <div class="form-field"><label>Estado</label><select id="aStatus"><option>OPERATIVO</option><option>EN MANTENIMIENTO</option><option>AVERIADO</option><option>BAJA</option></select></div>
-        <div class="form-field full"><label>Observaciones</label><textarea id="aObs"></textarea></div>
+  function cargoPersonKey(p){
+    return p.key || (norm(p.name)+"|"+String(p.dni||"").trim());
+  }
+
+  function nextCargoCode(){
+    const year=new Date().getFullYear();
+    const existing=(state?.cargoDocuments||[])
+      .map(d=>String(d.code||"").match(new RegExp("^FTEC-"+year+"-(\\d+)$","i")))
+      .filter(Boolean)
+      .map(m=>Number(m[1]))
+      .filter(Number.isFinite);
+    const seq=Math.max(CARGO_BASE_SEQUENCE,...existing)+1;
+    return `FTEC-${year}-${String(seq).padStart(3,"0")}`;
+  }
+
+  function cargoSnapshot(items){
+    return items
+      .slice()
+      .sort((a,b)=>(a.codigo||a.id||"").localeCompare(b.codigo||b.id||"","es"))
+      .map(r=>({
+        id:r.id,
+        cantidad:r.cantidad||"1",
+        equipo:r.equipo||"",
+        bien:r.bien||"",
+        marca:r.marca||"",
+        modelo:r.modelo||"",
+        caracteristicas:r.caracteristicas||r.detalle||r.descripcion||"",
+        codigo:r.codigo||"",
+        serie:r.serie||"",
+        estado:r.estado||"",
+        observaciones:r.observaciones||"",
+        situacion:r.situacion||""
+      }));
+  }
+
+  function cargoItemType(r){
+    if(r.bien) return r.bien;
+    const e=norm(r.equipo);
+    return /(PC|CASE|FUENTE DE PODER|PLACA MADRE|PROCESADOR|DISCO DURO|SSD|RAM)/.test(e)?"C.INTERNO":"PERIFÉRICO";
+  }
+
+  function cargoSoftwareHtml(){
+    const software=[
+      ["Windows","Windows",""],["Ms Office Professional Plus","Ms Office Professional Plus",""],
+      ["Winrar","Winbar",""],["VLC","VLC",""],["Aimp3","Aimp3",""],
+      ["Edge","",""],["Chrome","",""],["Firefox","",""],["Adobe Acrobat","2021",""],["Anydesk","",""]
+    ];
+    const rows=[];
+    for(let row=0;row<5;row++){
+      let cells="";
+      for(let block=0;block<3;block++){
+        const idx=row+(block*5);
+        const s=software[idx]||["","",""];
+        cells+=`<td class="num">${idx+1}</td><td>${esc(s[0])}</td><td>${esc(s[1])}</td><td>${esc(s[2])}</td>`;
+      }
+      rows.push("<tr>"+cells+"</tr>");
+    }
+    return `<div class="section-label">SOFTWARE</div>
+      <table class="software-table"><thead><tr>
+        <th>Item</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
+        <th>Item</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
+        <th>Item</th>Nombre</th><th>Versión</th><th>Detalles</th>
+      </tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  }
+
+  function revisionBox(title,dateValue,technician,boss,observation=""){
+    return `<div class="revision-box">
+      <div class="revision-title">${esc(title)}</div>
+      <div class="revision-date"><b>FECHA</b><span>${esc(dateValue?cargoDate(dateValue):"")}</span></div>
+      <div class="revision-observation"><b>OBSERVACIONES</b><span>${esc(observation||"")}</span></div>
+      <div class="revision-signatures">
+        <div class="signature-cell"><div class="signature-space"></div><b>FIRMA DEL USUARIO</b></div>
+        <div class="signature-cell"><div class="signature-space"></div><b>FIRMA DEL TÉCNICO</b></div>
       </div>
-      <div class="modal-actions"><button id="saveAsset" class="btn btn-primary">Guardar equipo</button></div>`);
-    $("#saveAsset").onclick=async()=>{
-      const code=PraxisExcel.cleanCode($("#aCode").value), equipment=norm($("#aEquipment").value);
-      const alert=$("#formAlert");
-      if(!code||!equipment){alert.className="alert error";alert.textContent="Código TIC y Equipo / Material son obligatorios.";return}
-      const existing=activeInventory().find(r=>norm(r.codigo)===code);
-      if(existing){alert.className="alert error";alert.innerHTML=`El Código TIC <b>${esc(code)}</b> ya existe en ${esc(existing.sede)} / ${esc(existing.area)}. No se puede duplicar.`;return}
-      const serial=$("#aSerial").value.trim();
-      const duplicateSerial=serial&&activeInventory().find(r=>r.serie&&norm(r.serie)===norm(serial));
-      if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`))return;
-      const r={id:code,codigo:code,codigoPadre:"",equipo:equipment,descripcion:"",marca:norm($("#aBrand").value),modelo:$("#aModel").value.trim(),serie:serial,sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),dni:"",estado:$("#aStatus").value,condicion:"",situacion:"INTERNO",source:"Registro web",observaciones:$("#aObs").value.trim(),duplicateSources:1,needsReview:false,conflictLocations:[],conflictRecords:[],locationType:$("#aPerson").value.trim()?"ASIGNADO":norm($("#aArea").value).includes("ALMAC")?"ALMACEN":"SEDE",history:[{type:"WEB",source:"Registro web",fecha:today(),sede:norm($("#aSite").value),area:$("#aArea").value.trim(),responsable:$("#aPerson").value.trim(),estado:$("#aStatus").value,observaciones:"Registro creado desde la web"}]};
-      state.inventory.unshift(r);state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:code,equipo:equipment,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),observaciones:r.observaciones});
-      await persist("ALTA_EQUIPO");closeModal();renderAll();toast("Equipo registrado y sincronizado.","success");
-    };
+      <div class="revision-names">
+        <div><span>${esc(technician)}</span><b>FIRMA DEL RESPONSABLE DE INF. TEC.</b></div>
+        <div><span>${esc(boss)}</span><b>FIRMA DEL JEFE DE TIC</b></div>
+      </div>
+    </div>`;
+  }
+
+  async function printCargo(p,stage="INICIAL") {
+    if(!ensureEditable()) return;
+    state.cargoDocuments=state.cargoDocuments||[];
+    const key=cargoPersonKey(p);
+    let doc=[...state.cargoDocuments].reverse().find(d=>d.personKey===key&&!d.finalDate);
+
+    if(stage==="INICIAL"){
+      if(!doc){
+        doc={
+          id:crypto.randomUUID(),
+          code:nextCargoCode(),
+          personKey:key,
+          personName:p.name,
+          dni:p.dni||"",
+          sede:[...p.sites].join(", "),
+          area:[...p.areas].join(", "),
+          situacion:"INTERNO",
+          initialDate:today(),
+          finalDate:"",
+          items:cargoSnapshot(p.items),
+          createdBy:currentProfile?.id||"",
+          createdByName:currentProfile?.nombre||currentProfile?.email||"",
+          createdAt:new Date().toISOString()
+        };
+        state.cargoDocuments.push(doc);
+        await persist("IMPRIMIR_CARGO_INICIAL");
+      }
+    }else{
+      if(!doc){
+        toast("No existe una entrega inicial abierta para este colaborador. Primero imprime la entrega inicial.","error");
+        return;
+      }
+      doc.finalDate=today();
+      doc.finalBy=currentProfile?.id||"";
+      doc.finalByName=currentProfile?.nombre||currentProfile?.email||"";
+      doc.finalAt=new Date().toISOString();
+      await persist("IMPRIMIR_CARGO_FINAL");
+    }
+
+    const technician=(currentProfile?.nombre||"CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO").toUpperCase();
+    const rowDate=stage==="FINAL"?(doc.finalDate||today()):doc.initialDate;
+    const items=doc.items||[];
+    const pageSize=25;
+    const pages=[];
+    for(let i=0;i<Math.max(1,Math.ceil(items.length/pageSize));i++)pages.push(items.slice(i*pageSize,(i+1)*pageSize));
+
+    const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
+    const pageHtml=pages.map((pageItems,fipageIndex)=>{
+      const globalStart=pageIndex*pageSize;
+      const rows=[];
+      for(let i=0;i<pageSize;i++){
+        const r=pageItems[i];
+        if(r){
+          const brandModel=[r.marca,r.modelo].filter(Boolean).join(" / ");
+          const codeSerie=[r.codigo,r.serie].filter(Boolean).join(" / ");
+          rows.push(`<tr>
+            <td class="num">${globalStart+i+1}</td>
+            <td class="num">${esc(r.cantidad||"1")}</td>
+            <td>${esc(r.equipo)}</td>
+            <td>${esc(cargoItemType(r))}</td>
+            <td>${esc(brandModel)}</td>
+            <td>${esc(r.caracteristicas)}</td>
+            <td>${esc(codeSerie||"SIN CÓDIGO")}</td>
+            <td>${esc(r.estado)}</td>
+            <td class="nowrap">${esc(cargoDate(rowDate))}</td>
+            <td class="sign-row"></td>
+            <td class="sign-row"></td>
+            <td>${esc(r.observaciones)}</td>
+          </tr>`);
+        }else{
+          rows.push(`<tr><td class="num">${globalStart+i+1}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="sign-row"></td><td class="sign-row"></td><td></td></tr>`);
+        }
+      }
+
+      const isLast=pageIndex===pages.length-1;
+      const reviews=isLast?`
+        ${cargoSoftwareHtml()}
+        <div class="revision-grid">
+          ${revisionBox("REVISIÓN INICIAL",doc.initialDate,technician,TIC_HEAD_NAME,"")}
+          ${revisionBox("REVISIÓN FINAL",doc.finalDate,technician,TIC_HEAD_NAME,"")}
+        </div>`:"";
+
+      return `<section class="print-page">
+        <div class="doc-title">FICHA TÉCNICA DE EQUIPO DE CÓMPUTO</div>
+        <div class="doc-meta">
+          <div><b>Código:</b><span>${esc(doc.code)}</span></div>
+          <div><b>Situación:</b><span>${esc(doc.situacion||"INTERNO")}</span></div>
+          <div class="meta-tech"><b>Técnico:</b><span>${esc(technician)}</span></div>
+          <div><b>Sede:</b><span>${esc(doc.sede||"")}</span></div>
+          <div><b>Área:</b><span>${esc(doc.area||"")}</span></div>
+          <div class="meta-user"><b>Usuario:</b><span>${esc(doc.personName)}${doc.dni?" · DNI: "+esc(doc.dni):""}</span><img src="${logo}"></div>
+        </div>
+        <div class="section-label">HARDWARE</div>
+        <table class="hardware-table"><thead><tr>
+          <th>Item</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca / Modelo</th><th>Características</th>
+          <th>Código TIC / Serie</th><th>Estado</th><th>Fecha</th><th>Firma Usuario</th><th>Firma TIC</th><th>Observación</th>
+        </tr></thead><tbody>${rows.join("")}</tbody></table>
+        ${reviews}
+        <div class="page-counter">Página ${pageIndex+1} de ${pages.length} · ${esc(stage==="FINAL"?"REVISIÓN FINAL":"ENTREGA INICIAL")}</div>
+      </section>`;
+    }).join("");
+
+    const w=window.open("","_blank");
+    if(!w){toast("El navegador bloqueó la ventana de impresión. Habilita ventanas emergentes para esta página.","error");return;}
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(doc.code)} - ${esc(doc.personName)}</title><style>
+      @page{size:A4 landscape;margin:6mm}
+      *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;background:#fff}
+      .print-page{width:100%;min-height:196mm;position:relative;page-break-after:always;padding-bottom:4mm}
+      .print-page:last-child{page-break-after:auto}.doc-title{text-align:center;border:1px solid #222;font-weight:800;font-size:11pt;padding:3px;margin-bottom:2px}
+      .doc-meta;display:grid;grid-template-columns:1fr 1fr 2.2fr;border-left:1px solid #222;border-top:1px solid #222;font-size:7.4pt}
+      .doc-meta>div{display:flex;min-height:18px;border-right:1px solid #222;border-bottom:1px solid #222;align-items:center}.doc-meta b{width:58px;text-align:right;padding-right:5px}.doc-meta span{flex:1;padding:2px 4px;font-weight:600}
+      .meta-user{position:relative;padding-right:92px}.meta-user img{position:absolute;right:7px;top:1px;height:31px;width:80px;object-fit:contain}
+      .section-label{font-size:7.5pt;font-weight:800;margin-top:2px}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #222;padding:1.4px 2px;vertical-align:middle;overflow-wrap:anywhere}
+      th{font-size:6.6pt;background:#f3f3f3;text-align:center}.hardware-table td{font-size:6.25pt;height:16px}.hardware-table th:nth-child(1){width:3%}.hardware-table th:nth-child(2){width:3%}.hardware-table th:nth-child(3){width:8%}.hardware-table th:nth-child(4){width:7%}.hardware-table th:nth-child(5){width:11%}.hardware-table th:nth-child(6){width:18%}.hardware-table th:nth-child(7){width:13%}.hardware-table th:nth-child(8){width:7%}.hardware-table th:nth-child(9){width:7%}.hardware-table th:nth-child(10){width:8%}.hardware-table th:nth-child(11){width:6%}.hardware-table th:nth-child(12){width:9%}
+      .num{text-align:center}.nowrap{white-space:nowrap}.sign-row{height:18px}
+      .software-table td{font-size:6.1pt;height:14px}.software-table th:nth-child(4n+1){width:3%}.software-table th:nth-child(4n+2){width:9%}.software-table th:nth-child(4n+3){width:9%}.software-table th:nth-child(4n+4){width:12%}
+      .revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:18mm;margin-top:6mm}.revision-box{border:1px solid #222;font-size:6.6pt}.revision-title{text-align:center;font-weight:800;border-bottom:1px solid #222;padding:2px}
+      .revision-date{display:grid;grid-template-columns:40% 60%;border-bottom:1px solid #222;min-height:18px;align-items:center;text-align:center}.revision-date b{border-right:1px solid #222;height:100%;display:grid;place-items:center}
+      .revision-observation{min-height:34px;border-bottom:1px solid #222;text-align:center;display:grid;grid-template-rows:14px 1fr}.revision-observation b{border-bottom:1px solid #222}.revision-observation span{padding:2px}
+      .revision-signatures{display:grid;grid-template-columns:1fr 1fr}.signature-cell{text-align:center;border-right:1px solid #222}.signature-cell:last-child{border-right:0}.signature-space{height:38px;border-bottom:1px solid #222}.signature-cell b{display:block;padding:2px}
+      .revision-names{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #222}.revision-names>div{text-align:center;border-right:1px solid #222}.revision-names>div:last-child{border-right:0}.revision-names span{display:block;min-height:17px;padding:2px;border-bottom:1px solid #222}.revision-names b{display:block;padding:2px}
+      .page-counter{text-align:right;font-size:6pt;margin-top:2px;color:#555}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body>${pageHtml}<script>window.onload=()=>setTimeout(()=>window.print(),350)<\/script></body></html>`);
+    w.document.close();
   }
 
   function csvDownload(records, filename, columns) {

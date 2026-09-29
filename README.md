@@ -29,6 +29,10 @@ La aplicación funciona como sitio web estático y está preparada para importar
 - Cámaras y redes.
 - Insumos, materiales y herramientas.
 - Movimientos e historial.
+- Módulo de **Revisión y depuración** para conflictos de ubicación y registros sin Código TIC.
+- Edición de fichas sin duplicar el Código TIC.
+- Resolución guiada de ubicaciones conflictivas usando las apariciones del Excel.
+- Selección de la ubicación más reciente cuando las fechas permiten determinarla.
 - Reportes por sede, equipo y estado.
 - Exportación CSV.
 - Copia de seguridad JSON.
@@ -50,6 +54,21 @@ Al transferir un equipo:
 - o al Almacén TIC,
 
 **no se crea otro Código TIC**. Solo cambia la ubicación/responsable actual y se registra un movimiento.
+
+## Validación con el inventario oficial 2026
+
+La lógica de importación fue contrastada con la estructura real del archivo oficial recibido. La revisión técnica detectó, sin publicar los datos sensibles:
+
+- 4,321 filas con información entre las hojas consideradas.
+- 1,140 Códigos TIC únicos en las hojas activas.
+- 70 Códigos TIC repetidos que deben consolidarse en un solo registro maestro.
+- 58 Códigos TIC con más de una ubicación, área o responsable y que requieren revisión.
+- 591 registros útiles sin Código TIC que deben mantenerse visibles para depuración.
+- El cruce más frecuente de duplicados ocurre entre **General** y **TIC - Almacén**.
+
+Por ese motivo, el sistema no elimina silenciosamente las diferencias: las conserva como historial y las muestra en **Revisión** para que TIC confirme cuál es la ubicación vigente.
+
+Ver: [docs/VALIDACION_INVENTARIO_2026.md](docs/VALIDACION_INVENTARIO_2026.md)
 
 ## Hojas procesadas del Excel
 

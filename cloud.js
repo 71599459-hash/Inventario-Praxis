@@ -94,11 +94,32 @@ const PraxisCloud = (() => {
     return data||[];
   }
 
+  function subscribeState(onRemoteState) {
+    const c=init();
+    if(!c) return null;
+    const channel=c.channel("praxis-inventory-state")
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"inventory_state",filter:"id=eq.1"},async payload=>{
+        const remoteVersion=Number(payload?.new?.version||0);
+        if(remoteVersion<=version) return;
+        try{
+          const latest=await loadState();
+          if(typeof onRemoteState==="function") onRemoteState(latest);
+        }catch(err){ console.error("Realtime inventory reload failed",err); }
+      })
+      .subscribe();
+    return channel;
+  }
+
+  async function unsubscribe(channel) {
+    const c=init();
+    if(c && channel) await c.removeChannel(channel);
+  }
+
   const role = () => profile?.role || "CONSULTA";
   const canEdit = () => ["ADMIN_TIC","EDITOR"].includes(role());
   const isAdmin = () => role()==="ADMIN_TIC";
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,signIn,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,audit,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,signIn,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

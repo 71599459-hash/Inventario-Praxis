@@ -82,6 +82,48 @@ create trigger on_auth_user_created_praxis
 after insert on auth.users
 for each row execute function public.handle_new_praxis_user();
 
+create or replace function public.bootstrap_first_admin()
+returns boolean
+language plpgsql
+security definer
+set search_path = public, auth
+as $
+declare
+  v_email text;
+  v_confirmed timestamptz;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  select email, email_confirmed_at
+    into v_email, v_confirmed
+  from auth.users
+  where id = auth.uid();
+
+  if v_email is null or lower(v_email) not like '%@praxis.edu.pe' then
+    return false;
+  end if;
+
+  if v_confirmed is null then
+    return false;
+  end if;
+
+  if exists(select 1 from public.profiles where role='ADMIN_TIC' and activo=true) then
+    return false;
+  end if;
+
+  update public.profiles
+     set role='ADMIN_TIC', updated_at=now()
+   where id=auth.uid();
+
+  insert into public.audit_events(user_id,action,summary)
+  values(auth.uid(),'BOOTSTRAP_ADMIN',jsonb_build_object('email',v_email));
+
+  return true;
+end;
+$;
+
 create or replace function public.save_inventory_state(
   p_payload jsonb,
   p_action text default 'ACTUALIZAR_INVENTARIO',
@@ -186,6 +228,7 @@ using (public.current_praxis_role() = 'ADMIN_TIC');
 
 
 -- Endurecer permisos: las escrituras se realizan únicamente mediante RPC controladas.
+revoke all on function public.bootstrap_first_admin() from public, anon;
 revoke all on function public.save_inventory_state(jsonb,text,bigint) from public, anon;
 revoke all on function public.set_user_role(uuid,praxis_role) from public, anon;
 revoke all on function public.current_praxis_role() from public, anon;
@@ -208,6 +251,7 @@ grant usage on schema public to authenticated;
 grant select on public.inventory_state to authenticated;
 grant select on public.profiles to authenticated;
 grant select on public.audit_events to authenticated;
+grant execute on function public.bootstrap_first_admin() to authenticated;
 grant execute on function public.current_praxis_role() to authenticated;
 grant execute on function public.save_inventory_state(jsonb,text,bigint) to authenticated;
 grant execute on function public.set_user_role(uuid,praxis_role) to authenticated;

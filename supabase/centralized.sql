@@ -369,6 +369,36 @@ grant execute on function public.save_inventory_state(jsonb,text,bigint) to auth
 grant execute on function public.set_user_role(uuid,praxis_role) to authenticated;
 grant execute on function public.set_user_active(uuid,boolean) to authenticated;
 
+-- Endurecimiento adicional aplicado en producción.
+revoke all on function public.handle_new_praxis_user() from public, anon, authenticated;
+
+create index if not exists inventory_state_updated_by_idx on public.inventory_state(updated_by);
+create index if not exists inventory_sync_updated_by_idx on public.inventory_sync(updated_by);
+
+drop policy if exists profiles_read_self_or_admin on public.profiles;
+create policy profiles_read_self_or_admin on public.profiles
+for select to authenticated
+using (
+  id = (select auth.uid())
+  or (select public.current_praxis_role()) = 'ADMIN_TIC'
+);
+
+drop policy if exists inventory_read_authorized on public.inventory_state;
+create policy inventory_read_authorized on public.inventory_state
+for select to authenticated
+using ((select public.current_praxis_authorized()));
+
+drop policy if exists inventory_sync_read_authorized on public.inventory_sync;
+create policy inventory_sync_read_authorized on public.inventory_sync
+for select to authenticated
+using ((select public.current_praxis_authorized()));
+
+drop policy if exists audit_read_admin on public.audit_events;
+create policy audit_read_admin on public.audit_events
+for select to authenticated
+using ((select public.current_praxis_role()) = 'ADMIN_TIC');
+
+
 -- Realtime usa una tabla liviana de versión. Al recibir un cambio, el cliente
 -- vuelve a leer inventory_state; así no se envía el JSON completo en el evento.
 do $$

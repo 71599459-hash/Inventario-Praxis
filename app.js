@@ -691,6 +691,14 @@
   async function enterCloudApp() {
     currentProfile=await PraxisCloud.loadProfile();
     if(!currentProfile || !currentProfile.activo) throw new Error("Tu usuario está inactivo.");
+
+    if(currentProfile.role==="CONSULTA"){
+      try{
+        const promoted=await PraxisCloud.bootstrapAdmin();
+        if(promoted) currentProfile=await PraxisCloud.loadProfile();
+      }catch(err){ console.warn("Bootstrap admin no aplicado",err); }
+    }
+
     const remote=await PraxisCloud.loadState();
     state=remote.state;
     if(state) await PraxisDB.set(STATE_KEY,state);
@@ -773,6 +781,27 @@
       if(e.target.value.trim())setView("inventory");
       renderInventory();
     });
+
+    if($("#signupBtn")) $("#signupBtn").onclick=async()=>{
+      const nombre=$("#loginName").value.trim();
+      const email=$("#loginEmail").value.trim();
+      const password=$("#loginPassword").value;
+      if(!email || !password){
+        showAuth("Ingresa correo institucional y una contraseña de al menos 8 caracteres.","error");
+        return;
+      }
+      try{
+        const data=await PraxisCloud.signUp(email,password,nombre);
+        if(data?.session){
+          await enterCloudApp();
+        }else{
+          showAuth("Cuenta creada. Revisa tu correo institucional para confirmar el registro y luego inicia sesión.","info");
+        }
+      }catch(err){
+        console.error(err);
+        showAuth((err&&err.message)||"No se pudo crear la cuenta.","error");
+      }
+    };
 
     if($("#loginForm")) $("#loginForm").onsubmit=async e=>{
       e.preventDefault();

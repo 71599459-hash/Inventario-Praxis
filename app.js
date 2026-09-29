@@ -1067,31 +1067,100 @@
       </div>`);
   }
 
-  async function init() {
-    cloudMode=PraxisCloud.configured();
+  function wireAuthControls() {
+    const showRegisterBtn=$("#showRegisterBtn");
+    if(showRegisterBtn) showRegisterBtn.onclick=()=>{
+      const loginEmail=$("#loginEmail");
+      const regEmail=$("#regEmail");
+      if(regEmail) regEmail.value=PraxisCloud.normalizeInstitutionalEmail(loginEmail?.value||"");
+      showRegister();
+      setTimeout(()=>$("#regName")?.focus(),50);
+    };
 
+    const backBtn=$("#backToLoginBtn");
+    if(backBtn) backBtn.onclick=()=>{
+      const regEmail=$("#regEmail")?.value?.trim()||"";
+      if(regEmail && $("#loginEmail")) $("#loginEmail").value=regEmail.replace(/@praxis\.edu\.pe$/i,"");
+      showLogin();
+    };
+
+    const registerForm=$("#registerForm");
+    if(registerForm) registerForm.onsubmit=async e=>{
+      e.preventDefault();
+      const nombre=$("#regName")?.value?.trim()||"";
+      const dni=$("#regDni")?.value?.trim()||"";
+      const cargo=$("#regCargo")?.value?.trim()||"";
+      const sede=$("#regSede")?.value?.trim()||"";
+      const area=$("#regArea")?.value?.trim()||"";
+      const email=$("#regEmail")?.value?.trim()||"";
+      const password=$("#regPassword")?.value||"";
+      const confirmPassword=$("#regPassword2")?.value||"";
+
+      if(password!==confirmPassword){
+        showRegister("Las contraseñas no coinciden.","error");
+        return;
+      }
+
+      const button=registerForm.querySelector("button[type='submit']");
+      const previous=button?.textContent||"Crear acceso al sistema";
+      if(button){button.disabled=true;button.textContent="Creando acceso…";}
+      try{
+        const data=await PraxisCloud.signUp({email,password,nombre,dni,cargo,sede,area});
+        if(data?.session){
+          await enterCloudApp();
+        }else{
+          if($("#loginEmail")) $("#loginEmail").value=PraxisCloud.normalizeInstitutionalEmail(email).replace(/@praxis\.edu\.pe$/i,"");
+          showLogin("Acceso creado. Ya puedes iniciar sesión.","info");
+        }
+      }catch(err){
+        console.error("Registro falló",err);
+        showRegister((err&&err.message)||"No se pudo crear el acceso.","error");
+      }finally{
+        if(button){button.disabled=false;button.textContent=previous;}
+      }
+    };
+
+    const loginForm=$("#loginForm");
+    if(loginForm) loginForm.onsubmit=async e=>{
+      e.preventDefault();
+      const email=$("#loginEmail")?.value?.trim()||"";
+      const password=$("#loginPassword")?.value||"";
+      const box=$("#authMessage");
+      if(box){box.textContent="Ingresando…";box.className="auth-message show info";}
+      try {
+        await PraxisCloud.signIn(email,password);
+        await enterCloudApp();
+      } catch(err) {
+        console.error("Login falló",err);
+        showLogin((err&&err.message)||"No se pudo iniciar sesión.","error");
+      }
+    };
+  }
+
+  function wireAppControls() {
     $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
-    $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
-    $("#modalClose").onclick=closeModal;
-    $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
-    $("#dismissPrivacy").onclick=()=>$("#privacyBanner").remove();
-    $("#importBtnTop").onclick=()=>$("#excelInput").click();
-    $("#importBtnEmpty").onclick=()=>$("#excelInput").click();
-    $("#excelInput").onchange=e=>{const f=e.target.files[0];if(f)importExcel(f);e.target.value=""};
-    $("#demoInfoBtn").onclick=demoInfo;
-    $("#addAssetBtn").onclick=openAddAsset;
-    $("#exportCsvBtn").onclick=exportInventory;
-    $("#backupBtn").onclick=downloadBackup;
-    $("#exportMovementsBtn").onclick=exportMovements;
-    $("#restoreBtn").onclick=()=>$("#restoreInput").click();
-    $("#restoreInput").onchange=e=>{const f=e.target.files[0];if(f)restoreBackup(f);e.target.value=""};
-    $("#clearLocalBtn").onclick=clearLocalData;
+    if($("#mobileMenu")) $("#mobileMenu").onclick=()=>$("#sidebar")?.classList.toggle("open");
+    if($("#modalClose")) $("#modalClose").onclick=closeModal;
+    if($("#modal")) $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
+    if($("#dismissPrivacy")) $("#dismissPrivacy").onclick=()=>$("#privacyBanner")?.remove();
+    if($("#importBtnTop")) $("#importBtnTop").onclick=()=>$("#excelInput")?.click();
+    if($("#importBtnEmpty")) $("#importBtnEmpty").onclick=()=>$("#excelInput")?.click();
+    if($("#excelInput")) $("#excelInput").onchange=e=>{const file=e.target.files?.[0];if(file)importExcel(file);e.target.value=""};
+    if($("#demoInfoBtn")) $("#demoInfoBtn").onclick=demoInfo;
+    if($("#addAssetBtn")) $("#addAssetBtn").onclick=openAddAsset;
+    if($("#exportCsvBtn")) $("#exportCsvBtn").onclick=exportInventory;
+    if($("#backupBtn")) $("#backupBtn").onclick=downloadBackup;
+    if($("#exportMovementsBtn")) $("#exportMovementsBtn").onclick=exportMovements;
+    if($("#restoreBtn")) $("#restoreBtn").onclick=()=>$("#restoreInput")?.click();
+    if($("#restoreInput")) $("#restoreInput").onchange=e=>{const file=e.target.files?.[0];if(file)restoreBackup(file);e.target.value=""};
+    if($("#clearLocalBtn")) $("#clearLocalBtn").onclick=clearLocalData;
     if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
     if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
     if($("#authorizedSearch")) $("#authorizedSearch").addEventListener("input",renderUsers);
     if($("#authorizedStatus")) $("#authorizedStatus").addEventListener("change",renderUsers);
     if($("#authorizedRole")) $("#authorizedRole").addEventListener("change",renderUsers);
+
     const doLogout=async()=>{
       if(realtimeChannel){await PraxisCloud.unsubscribe(realtimeChannel);realtimeChannel=null;}
       await PraxisCloud.signOut();
@@ -1101,95 +1170,40 @@
     if($("#logoutBtn")) $("#logoutBtn").onclick=doLogout;
     if($("#logoutSidebarBtn")) $("#logoutSidebarBtn").onclick=doLogout;
 
-    ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>$(sel).addEventListener("input",()=>{page=1;renderInventory()}));
-    $("#peopleSearch").addEventListener("input",renderPeople);
-    $("#reviewSearch").addEventListener("input",renderReview);
-    $("#globalSearch").addEventListener("input",e=>{
+    ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>{
+      const el=$(sel); if(el) el.addEventListener("input",()=>{page=1;renderInventory()});
+    });
+    if($("#peopleSearch")) $("#peopleSearch").addEventListener("input",renderPeople);
+    if($("#reviewSearch")) $("#reviewSearch").addEventListener("input",renderReview);
+    if($("#globalSearch")) $("#globalSearch").addEventListener("input",e=>{
       if(!state?.inventory?.length)return;
-      $("#inventorySearch").value=e.target.value;
+      if($("#inventorySearch")) $("#inventorySearch").value=e.target.value;
       page=1;
       if(e.target.value.trim())setView("inventory");
       renderInventory();
     });
+  }
 
-    if($("#showRegisterBtn")) $("#showRegisterBtn").onclick=()=>{
-      $("#regEmail").value=PraxisCloud.normalizeInstitutionalEmail($("#loginEmail").value||"");
-      showRegister();
-      setTimeout(()=>$("#regName").focus(),50);
-    };
+  async function init() {
+    cloudMode=PraxisCloud.configured();
 
-    if($("#backToLoginBtn")) $("#backToLoginBtn").onclick=()=>{
-      const email=$("#regEmail").value.trim();
-      if(email) $("#loginEmail").value=email.replace(/@praxis\.edu\.pe$/i,"");
-      showLogin();
-    };
-
-    if($("#registerForm")) $("#registerForm").onsubmit=async e=>{
-      e.preventDefault();
-      const nombre=$("#regName").value.trim();
-      const dni=$("#regDni").value.trim();
-      const cargo=$("#regCargo").value.trim();
-      const sede=$("#regSede").value.trim();
-      const area=$("#regArea").value.trim();
-      const email=$("#regEmail").value.trim();
-      const password=$("#regPassword").value;
-      const confirmPassword=$("#regPassword2").value;
-
-      if(password!==confirmPassword){
-        showRegister("Las contraseñas no coinciden.","error");
-        return;
-      }
-
-      const button=$("#registerForm button[type='submit']");
-      const previous=button.textContent;
-      button.disabled=true;
-      button.textContent="Creando acceso…";
-      try{
-        const data=await PraxisCloud.signUp({email,password,nombre,dni,cargo,sede,area});
-        if(data?.session){
-          await enterCloudApp();
-        }else{
-          $("#loginEmail").value=PraxisCloud.normalizeInstitutionalEmail(email).replace(/@praxis\.edu\.pe$/i,"");
-          showLogin("Acceso creado. Revisa tu correo institucional para confirmar la cuenta y luego inicia sesión.","info");
-        }
-      }catch(err){
-        console.error(err);
-        showRegister((err&&err.message)||"No se pudo crear el acceso.","error");
-      }finally{
-        button.disabled=false;
-        button.textContent=previous;
-      }
-    };
-
-    if($("#loginForm")) $("#loginForm").onsubmit=async e=>{
-      e.preventDefault();
-      const email=$("#loginEmail").value.trim();
-      const password=$("#loginPassword").value;
-      const box=$("#authMessage");
-      box.textContent="Ingresando…";
-      box.className="auth-message show info";
-      try {
-        await PraxisCloud.signIn(email,password);
-        await enterCloudApp();
-      } catch(err) {
-        console.error(err);
-        showAuth((err&&err.message)||"No se pudo iniciar sesión.","error");
-      }
-    };
+    // El acceso se conecta primero; así un error del panel nunca bloquea Login/Crear cuenta.
+    wireAuthControls();
+    wireAppControls();
 
     if(cloudMode) {
+      showLogin();
       try {
         const session=await PraxisCloud.getSession();
         if(session) await enterCloudApp();
-        else showLogin();
       } catch(err) {
-        console.error(err);
-        showAuth((err&&err.message)||"No se pudo conectar con la base de datos.","error");
+        console.error("No se pudo restaurar la sesión",err);
+        showLogin((err&&err.message)||"No se pudo conectar con la base de datos.","error");
       }
     } else {
       state=await PraxisDB.get(STATE_KEY);
-      $("#authGate").classList.add("hidden");
-      $("#appShell").classList.remove("hidden");
+      $("#authGate")?.classList.add("hidden");
+      $("#appShell")?.classList.remove("hidden");
       updateProfileUI();
       renderAll();
     }

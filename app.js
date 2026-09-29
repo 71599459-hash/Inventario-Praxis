@@ -1056,7 +1056,7 @@
   async function init() {
     cloudMode=PraxisCloud.configured();
 
-    $$$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+    $(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     $("#mobileMenu").onclick=()=>$("#sidebar").classList.toggle("open");
     $("#modalClose").onclick=closeModal;
@@ -1153,5 +1153,20 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded",init);
+  document.addEventListener("DOMContentLoaded",()=>{
+    init().catch(err=>{
+      console.error("Inventario Praxis no pudo iniciar",err);
+      try{
+        const gate=document.querySelector("#authGate");
+        const shell=document.querySelector("#appShell");
+        const box=document.querySelector("#authMessage");
+        if(shell) shell.classList.add("hidden");
+        if(gate) gate.classList.remove("hidden");
+        if(box){
+          box.textContent="No se pudo iniciar el sistema. Actualiza la página. Si continúa, comunícate con TIC.";
+          box.className="auth-message show error";
+        }
+      }catch(_){}
+    });
+  });
 })();

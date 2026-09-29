@@ -612,7 +612,7 @@
   function cargoSoftwareHtml(){
     const software=[
       ["Windows","Windows",""],["Ms Office Professional Plus","Ms Office Professional Plus",""],
-      ["Winrar","Winbar",""],["VLC","VLC",""],["Aimp3","Aimp3",""],
+      ["Winrar","Winrar",""],["VLC","VLC",""],["Aimp3","Aimp3",""],
       ["Edge","",""],["Chrome","",""],["Firefox","",""],["Adobe Acrobat","2021",""],["Anydesk","",""]
     ];
     const rows=[];
@@ -629,7 +629,7 @@
       <table class="software-table"><thead><tr>
         <th>Item</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
         <th>Item</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
-        <th>Item</th>Nombre</th><th>Versión</th><th>Detalles</th>
+        <th>Item</th><th>Nombre</th><th>Versión</th><th>Detalles</th>
       </tr></thead><tbody>${rows.join("")}</tbody></table>`;
   }
 
@@ -653,7 +653,10 @@
     if(!ensureEditable()) return;
     state.cargoDocuments=state.cargoDocuments||[];
     const key=cargoPersonKey(p);
-    let doc=[...state.cargoDocuments].reverse().find(d=>d.personKey===key&&!d.finalDate);
+    const personDocs=state.cargoDocuments.filter(d=>d.personKey===key);
+    let doc=stage==="FINAL"
+      ? ([...personDocs].reverse().find(d=>!d.finalDate) || personDocs[personDocs.length-1])
+      : [...personDocs].reverse().find(d=>!d.finalDate);
 
     if(stage==="INICIAL"){
       if(!doc){
@@ -678,14 +681,16 @@
       }
     }else{
       if(!doc){
-        toast("No existe una entrega inicial abierta para este colaborador. Primero imprime la entrega inicial.","error");
+        toast("No existe una entrega inicial para este colaborador. Primero imprime la entrega inicial.","error");
         return;
       }
-      doc.finalDate=today();
-      doc.finalBy=currentProfile?.id||"";
-      doc.finalByName=currentProfile?.nombre||currentProfile?.email||"";
-      doc.finalAt=new Date().toISOString();
-      await persist("IMPRIMIR_CARGO_FINAL");
+      if(!doc.finalDate){
+        doc.finalDate=today();
+        doc.finalBy=currentProfile?.id||"";
+        doc.finalByName=currentProfile?.nombre||currentProfile?.email||"";
+        doc.finalAt=new Date().toISOString();
+        await persist("IMPRIMIR_CARGO_FINAL");
+      }
     }
 
     const technician=(currentProfile?.nombre||"CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO").toUpperCase();
@@ -696,7 +701,7 @@
     for(let i=0;i<Math.max(1,Math.ceil(items.length/pageSize));i++)pages.push(items.slice(i*pageSize,(i+1)*pageSize));
 
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
-    const pageHtml=pages.map((pageItems,fipageIndex)=>{
+    const pageHtml=pages.map((pageItems,pageIndex)=>{
       const globalStart=pageIndex*pageSize;
       const rows=[];
       for(let i=0;i<pageSize;i++){
@@ -758,7 +763,7 @@
       *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;background:#fff}
       .print-page{width:100%;min-height:196mm;position:relative;page-break-after:always;padding-bottom:4mm}
       .print-page:last-child{page-break-after:auto}.doc-title{text-align:center;border:1px solid #222;font-weight:800;font-size:11pt;padding:3px;margin-bottom:2px}
-      .doc-meta;display:grid;grid-template-columns:1fr 1fr 2.2fr;border-left:1px solid #222;border-top:1px solid #222;font-size:7.4pt}
+      .doc-meta{display:grid;grid-template-columns:1fr 1fr 2.2fr;border-left:1px solid #222;border-top:1px solid #222;font-size:7.4pt}
       .doc-meta>div{display:flex;min-height:18px;border-right:1px solid #222;border-bottom:1px solid #222;align-items:center}.doc-meta b{width:58px;text-align:right;padding-right:5px}.doc-meta span{flex:1;padding:2px 4px;font-weight:600}
       .meta-user{position:relative;padding-right:92px}.meta-user img{position:absolute;right:7px;top:1px;height:31px;width:80px;object-fit:contain}
       .section-label{font-size:7.5pt;font-weight:800;margin-top:2px}
@@ -807,6 +812,7 @@
       const next=await PraxisExcel.fromFile(file);
       if (!next.inventory.length) throw new Error("No se encontraron registros de inventario.");
       next.fileName=file.name;
+      next.cargoDocuments=state?.cargoDocuments||[];
       state=next;await persist("IMPORTAR_EXCEL");page=1;renderAll();setView("dashboard");
       toast(`Inventario importado: ${state.inventory.length} registros maestros.`,"success");
     }catch(err){console.error(err);toast(err.message||"No se pudo importar el Excel.","error")}
@@ -823,6 +829,7 @@
       state=restored;
       state.webMovements=state.webMovements||[];
       state.transactions=state.transactions||[];
+      state.cargoDocuments=state.cargoDocuments||[];
       await persist("RESTAURAR_BACKUP");page=1;renderAll();setView("dashboard");
       toast("Copia de seguridad restaurada correctamente.","success");
     }catch(err){console.error(err);toast(err.message||"No se pudo restaurar la copia.","error")}
@@ -950,6 +957,8 @@
         MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
         RESOLVER_CONFLICTO:"Resolución de conflicto",
         RESTAURAR_BACKUP:"Restauración de copia",
+        IMPRIMIR_CARGO_INICIAL:"Ficha técnica - entrega inicial",
+        IMPRIMIR_CARGO_FINAL:"Ficha técnica - revisión final",
         CAMBIAR_ROL:"Cambio de rol",
         AUTORIZAR_USUARIO:"Autorización de personal",
         DESAUTORIZAR_USUARIO:"Retiro de acceso",

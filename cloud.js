@@ -118,7 +118,7 @@ const PraxisCloud = (() => {
     const c=init();
     if(!c) return null;
     const channel=c.channel("praxis-inventory-state")
-      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"inventory_state",filter:"id=eq.1"},async payload=>{
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"inventory_sync",filter:"id=eq.1"},async payload=>{
         const remoteVersion=Number(payload?.new?.version||0);
         if(remoteVersion<=version) return;
         try{

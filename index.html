@@ -101,7 +101,7 @@
           <h2>Carga el inventario oficial de Colegio Praxis</h2>
           <p>Selecciona tu archivo <b>.xlsx</b>. El sistema consolidará Código TIC, sedes, colaboradores, almacén, cámaras, redes, materiales y movimientos sin duplicar los códigos.</p>
           <div class="empty-actions">
-            <button id="importBtnEmpty" class="btn btn-primary">Seleccionar Inventario Excel</button>
+            <button id="importBtnEmpty" class="btn btn-primary edit-only">Seleccionar Inventario Excel</button>
             <button id="demoInfoBtn" class="btn btn-soft">¿Qué hará el sistema?</button>
           </div>
           <div class="security-note">El repositorio es público: por seguridad los DNI, responsables y detalles del inventario real no se suben al código fuente.</div>
@@ -151,11 +151,11 @@
                   <p>Un Código TIC representa un solo registro maestro. Las apariciones repetidas se conservan como historial.</p>
                 </div>
                 <div class="button-row">
-                  <button id="addAssetBtn" class="btn btn-primary">+ Agregar equipo</button>
+                  <button id="addAssetBtn" class="btn btn-primary edit-only">+ Agregar equipo</button>
                   <button id="exportCsvBtn" class="btn btn-success">Exportar CSV</button>
                   <button id="backupBtn" class="btn btn-soft">Copia JSON</button>
-                  <button id="restoreBtn" class="btn btn-soft">Restaurar JSON</button>
-                  <button id="clearLocalBtn" class="btn btn-danger">Borrar datos locales</button>
+                  <button id="restoreBtn" class="btn btn-soft edit-only">Restaurar JSON</button>
+                  <button id="clearLocalBtn" class="btn btn-danger edit-only">Borrar datos locales</button>
                 </div>
               </div>
 

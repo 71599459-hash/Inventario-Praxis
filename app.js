@@ -94,7 +94,7 @@
   function updateProfileUI() {
     const p = currentProfile || PraxisCloud.getProfile();
     const displayName=(p && (p.nombre || p.email)) || "Usuario";
-    const displayRole=roleLabel((p && p.role) || "LOCAL");
+    const displayRole=(p && String(p.email||"").toLowerCase()===OWNER_ADMIN_EMAIL) ? "Master TIC" : roleLabel((p && p.role) || "LOCAL");
     if ($("#profileName")) $("#profileName").textContent = displayName;
     if ($("#profileRole")) $("#profileRole").textContent = displayRole;
     if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = displayName;
@@ -1220,6 +1220,121 @@
     toast("Datos locales borrados. Se conservó una copia de recuperación interna.","success");
   }
 
+  function openCreateUser() {
+    if(!canManageUsers()) {
+      toast("Solo la cuenta Master puede crear usuarios.","error");
+      return;
+    }
+
+    showModal("Crear usuario","Prepara un nuevo acceso al Inventario Praxis con DNI y rol.",`
+      <div class="alert info">
+        <b>Cuenta Master:</b> solo r.cardenas puede crear y administrar usuarios.
+        El usuario final ingresará con su DNI.
+      </div>
+      <div id="createUserAlert"></div>
+      <div class="form-grid">
+        <div class="form-field"><label>DNI *</label><input id="cuDni" maxlength="8" inputmode="numeric" placeholder="8 dígitos"></div>
+        <div class="form-field"><label>Rol *</label>
+          <select id="cuRole">
+            <option value="EDITOR">Editor</option>
+            <option value="CONSULTA">Consulta</option>
+          </select>
+        </div>
+        <div class="form-field full"><label>Nombres y apellidos *</label><input id="cuName"></div>
+        <div class="form-field"><label>Cargo *</label><input id="cuCargo" placeholder="Ej. Secretaria, Subdirector, TIC"></div>
+        <div class="form-field"><label>Sede *</label>
+          <select id="cuSite">
+            <option value="">Seleccionar</option>
+            <option>Centro</option>
+            <option>Estrellas</option>
+            <option>Esperanza</option>
+            <option>Estrellitas</option>
+            <option>Grass Rey León</option>
+            <option>Casa del Saber</option>
+            <option>Bazar</option>
+            <option>Otra</option>
+          </select>
+        </div>
+        <div class="form-field full"><label>Área *</label><input id="cuArea" placeholder="Ej. Secretaría, Subdirección, TIC"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="prepareUserBtn" class="btn btn-primary">Preparar usuario</button>
+      </div>
+      <div id="preparedUserResult"></div>
+    `);
+
+    $("#prepareUserBtn").onclick=async()=>{
+      const dni=$("#cuDni").value.trim();
+      const nombre=$("#cuName").value.trim();
+      const cargo=$("#cuCargo").value.trim();
+      const sede=$("#cuSite").value.trim();
+      const area=$("#cuArea").value.trim();
+      const role=$("#cuRole").value;
+      const alert=$("#createUserAlert");
+
+      alert.className="";
+      alert.textContent="";
+
+      if(!/^\d{8}$/.test(dni)){
+        alert.className="alert error";
+        alert.textContent="El DNI debe tener 8 dígitos.";
+        return;
+      }
+      if(!nombre || !cargo || !sede || !area){
+        alert.className="alert error";
+        alert.textContent="Completa todos los datos obligatorios.";
+        return;
+      }
+
+      const btn=$("#prepareUserBtn");
+      const old=btn.textContent;
+      btn.disabled=true;
+      btn.textContent="Preparando…";
+
+      try{
+        const internalEmail=await PraxisCloud.prepareUser({dni,nombre,cargo,sede,area,role});
+        const result=$("#preparedUserResult");
+        result.innerHTML=`
+          <div class="alert success" style="margin-top:14px">
+            <b>Usuario preparado correctamente.</b><br>
+            Usuario para ingresar: <b>${esc(dni)}</b><br>
+            Rol: <b>${esc(roleLabel(role))}</b><br>
+            Cuenta interna de Supabase: <b>${esc(internalEmail)}</b>
+          </div>
+          <div class="alert info">
+            Para terminar el acceso, crea este usuario una sola vez en <b>Supabase → Authentication → Users → Add user</b>
+            usando la cuenta interna mostrada arriba y define su contraseña. Al crearlo, quedará autorizado automáticamente con este rol.
+          </div>
+          <div class="modal-actions">
+            <button id="copyPreparedEmail" class="btn btn-soft">Copiar cuenta interna</button>
+            <button id="openSupabaseUsers" class="btn btn-primary">Abrir Supabase Users</button>
+          </div>
+        `;
+
+        $("#copyPreparedEmail").onclick=async()=>{
+          try{
+            await navigator.clipboard.writeText(internalEmail);
+            toast("Cuenta interna copiada.","success");
+          }catch(_){
+            toast(internalEmail,"info");
+          }
+        };
+        $("#openSupabaseUsers").onclick=()=>{
+          window.open("https://supabase.com/dashboard/project/pgdljamqgqvfnyeuxkew/auth/users","_blank","noopener");
+        };
+
+        toast("Usuario preparado por la cuenta Master.","success");
+      }catch(err){
+        console.error(err);
+        alert.className="alert error";
+        alert.textContent=(err&&err.message)||"No se pudo preparar el usuario.";
+      }finally{
+        btn.disabled=false;
+        btn.textContent=old;
+      }
+    };
+  }
+
   async function renderUsers() {
     if(!canManageUsers() || !$("#usersTable")) return;
     try {
@@ -1238,7 +1353,7 @@
         [allUsers.length,"Cuentas registradas"],
         [activeCount,"Personal autorizado"],
         [pendingCount,"Pendientes / bloqueados"],
-        [admins,"Administradores TIC"],
+        [admins,"Cuenta Master"],
         [editors,"Editores"],
         [consult,"Solo consulta"]
       ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
@@ -1253,26 +1368,29 @@
       const me=currentProfile?.id;
       const rows=users.map(u=>{
         const isMe=u.id===me;
+        const isMaster=String(u.email||"").toLowerCase()===OWNER_ADMIN_EMAIL;
         const statusBadge=u.activo
           ? '<span class="badge ok">AUTORIZADO</span>'
           : '<span class="badge warn">PENDIENTE / BLOQUEADO</span>';
         const actionText=u.activo?"Desautorizar":"Autorizar";
         const actionClass=u.activo?"btn-danger":"btn-success";
-        return `<tr>
-          <td>
-            <div class="user-name-cell"><span class="avatar mini">TIC</span><div><b>${esc(u.nombre||"Sin nombre")}</b>${isMe?'<span class="you-tag">Tú</span>':""}<div class="muted">${esc(u.email||"")}</div><div class="muted">DNI: ${esc(u.dni||"—")}</div></div></div>
-          </td>
-          <td><b>${esc(u.cargo||"—")}</b><div class="muted">${esc([u.sede,u.area].filter(Boolean).join(" / ")||"—")}</div></td>
-          <td>
-            <select class="role-select" data-role-user="${esc(u.id)}" ${isMe&&u.role==="ADMIN_TIC"&&admins<=1?"disabled":""}>
-              <option value="ADMIN_TIC" ${u.role==="ADMIN_TIC"?"selected":""}>Administrador TIC</option>
+
+        const roleControl=isMaster
+          ? '<select class="role-select" disabled><option selected>MASTER TIC</option></select>'
+          : `<select class="role-select" data-role-user="${esc(u.id)}">
               <option value="EDITOR" ${u.role==="EDITOR"?"selected":""}>Editor</option>
               <option value="CONSULTA" ${u.role==="CONSULTA"?"selected":""}>Consulta</option>
-            </select>
+            </select>`;
+
+        return `<tr>
+          <td>
+            <div class="user-name-cell"><span class="avatar mini">TIC</span><div><b>${esc(u.nombre||"Sin nombre")}</b>${isMaster?'<span class="you-tag">MASTER</span>':""}<div class="muted">${isMaster?esc(u.email||""):"Usuario DNI: "+esc(u.dni||"—")}</div><div class="muted">DNI: ${esc(u.dni||"—")}</div></div></div>
           </td>
+          <td><b>${esc(u.cargo||"—")}</b><div class="muted">${esc([u.sede,u.area].filter(Boolean).join(" / ")||"—")}</div></td>
+          <td>${roleControl}</td>
           <td>${statusBadge}</td>
           <td>${esc(fmtDateTime(u.last_login_at))}</td>
-          <td><button class="btn ${actionClass} btn-small" data-active-user="${esc(u.id)}" data-next-active="${u.activo?"false":"true"}" ${isMe?"disabled":""}>${actionText}</button></td>
+          <td><button class="btn ${actionClass} btn-small" data-active-user="${esc(u.id)}" data-next-active="${u.activo?"false":"true"}" ${isMaster?"disabled":""}>${actionText}</button></td>
         </tr>`;
       }).join("");
 
@@ -1335,7 +1453,8 @@
         CAMBIAR_ROL:"Cambio de rol",
         AUTORIZAR_USUARIO:"Autorización de personal",
         DESAUTORIZAR_USUARIO:"Retiro de acceso",
-        BOOTSTRAP_ADMIN:"Alta del primer Administrador TIC",
+        BOOTSTRAP_ADMIN:"Alta de cuenta Master",
+        CREAR_USUARIO:"Creación de usuario",
         }[action]||action||"Evento");
 
       const rows=items.map(a=>{
@@ -1492,6 +1611,7 @@
     if($("#restoreBtn")) $("#restoreBtn").onclick=()=>$("#restoreInput")?.click();
     if($("#restoreInput")) $("#restoreInput").onchange=e=>{const file=e.target.files?.[0];if(file)restoreBackup(file);e.target.value=""};
     if($("#clearLocalBtn")) $("#clearLocalBtn").onclick=clearLocalData;
+    if($("#createUserBtn")) $("#createUserBtn").onclick=openCreateUser;
     if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
     if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
     if($("#authorizedSearch")) $("#authorizedSearch").addEventListener("input",renderUsers);

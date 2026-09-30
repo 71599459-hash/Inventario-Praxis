@@ -1301,6 +1301,7 @@
         IMPORTAR_EXCEL:"Importación de Excel",
         ALTA_EQUIPO:"Alta de equipo",
         EDITAR_FICHA:"Edición de ficha",
+        EDITAR_COLABORADOR:"Edición de datos de cargo",
         MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
         RESOLVER_CONFLICTO:"Resolución de conflicto",
         RESTAURAR_BACKUP:"Restauración de copia",

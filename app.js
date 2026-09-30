@@ -1625,20 +1625,58 @@
     const loginForm=$("#loginForm");
     if(loginForm) loginForm.onsubmit=async e=>{
       e.preventDefault();
-      const email=$("#loginEmail")?.value?.trim()||"";
+
+      const user=$("#loginEmail")?.value?.trim()||"";
       const password=$("#loginPassword")?.value||"";
       const box=$("#authMessage");
-      if(box){box.textContent="Ingresando…";box.className="auth-message show info";}
+      const button=loginForm.querySelector("button[type='submit']");
+
+      if(!user || !password){
+        if(box){
+          box.textContent="Ingrese usuario y contraseña";
+          box.className="auth-message show error";
+        }
+        return;
+      }
+
+      const previousText=button?.textContent||"Iniciar sesión";
+      if(button){
+        button.disabled=true;
+        button.textContent="Iniciando...";
+      }
+
+      if(box){
+        box.textContent="";
+        box.className="auth-message";
+      }
+
       try {
-        await PraxisCloud.signIn(email,password);
+        await PraxisCloud.signIn(user,password);
+
+        if(box){
+          box.textContent="Sesión iniciada correctamente, redireccionando...";
+          box.className="auth-message show success";
+        }
+
+        // Mantener visible el mensaje de confirmación tal como en la referencia
+        // y recién después abrir el inventario.
+        await new Promise(resolve=>setTimeout(resolve,850));
         await enterCloudApp();
       } catch(err) {
         console.error("Login falló",err);
-        showLogin();
+        if(box){
+          box.textContent="La contraseña ingresada es incorrecta";
+          box.className="auth-message show error";
+        }
         const passwordField=$("#loginPassword");
         if(passwordField){
-          passwordField.value="";
           passwordField.focus();
+          passwordField.select();
+        }
+      } finally {
+        if(button){
+          button.disabled=false;
+          button.textContent=previousText;
         }
       }
     };
@@ -1674,7 +1712,8 @@
       if(accessChannel){await PraxisCloud.unsubscribe(accessChannel);accessChannel=null;}
       await PraxisCloud.signOut();
       state=null;currentProfile=null;
-      showLogin("Sesión cerrada correctamente.","info");
+      if($("#loginPassword")) $("#loginPassword").value="";
+      showLogin();
     };
     if($("#logoutBtn")) $("#logoutBtn").onclick=doLogout;
     if($("#logoutSidebarBtn")) $("#logoutSidebarBtn").onclick=doLogout;
@@ -1696,19 +1735,14 @@
   async function init() {
     cloudMode=PraxisCloud.configured();
 
-    // El acceso se conecta primero; así un error del panel nunca bloquea Login/Crear cuenta.
     wireAuthControls();
     wireAppControls();
 
     if(cloudMode) {
+      // Siempre mostrar el login al abrir/recargar.
+      // Aunque exista una sesión guardada, el sistema solo entra al pulsar "Iniciar sesión".
       showLogin();
-      try {
-        const session=await PraxisCloud.getSession();
-        if(session) await enterCloudApp();
-      } catch(err) {
-        console.error("No se pudo restaurar la sesión",err);
-        showLogin((err&&err.message)||"No se pudo conectar con la base de datos.","error");
-      }
+      setTimeout(()=>$("#loginEmail")?.focus(),50);
     } else {
       state=await PraxisDB.get(STATE_KEY);
       $("#authGate")?.classList.add("hidden");

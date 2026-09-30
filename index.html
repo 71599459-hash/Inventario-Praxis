@@ -276,9 +276,12 @@
               <div class="panel-head panel-head-row">
                 <div>
                   <h3>Personal autorizado</h3>
-                  <p>Control de acceso al Inventario TIC del Colegio Praxis. Las cuentas nuevas quedan pendientes hasta que un Administrador TIC las autorice.</p>
+                  <p>Control de acceso al Inventario TIC. Solo la cuenta Master r.cardenas administra usuarios y roles.</p>
                 </div>
-                <button id="refreshUsersBtn" class="btn btn-soft">Actualizar personal</button>
+                <div class="panel-actions">
+                  <button id="createUserBtn" class="btn btn-primary">+ Crear usuario</button>
+                  <button id="refreshUsersBtn" class="btn btn-soft">Actualizar personal</button>
+                </div>
               </div>
 
               <div id="authorizedSummary" class="quality-grid" style="margin-bottom:14px"></div>
@@ -299,7 +302,7 @@
               </div>
 
               <div class="alert info">
-                <b>Permisos:</b> Administrador TIC administra usuarios y el inventario; Editor actualiza el inventario; Consulta solo visualiza. Una cuenta pendiente no puede acceder a los datos.
+                <b>Permisos:</b> Master (r.cardenas) administra usuarios y todo el inventario; Editor puede actualizar; Consulta solo visualiza. Los usuarios acceden con DNI.
               </div>
               <div id="usersTable"></div>
             </article>

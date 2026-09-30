@@ -12,26 +12,28 @@
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
-    <div class="auth-card">
-      <img data-brand-logo alt="Colegio Praxis" />
-      <div class="auth-brand">Colegio <b>PRAXIS</b></div>
-      <h1>Inventario TIC</h1>
-      <p id="authSubtitle">Acceso exclusivo para personal autorizado por TIC.</p>
-      <div id="authMessage" class="auth-message"></div>
+    <div class="auth-card praxis-login-card">
+      <div class="login-header">
+        <img data-brand-logo alt="Colegio Praxis" class="login-logo" />
+        <h1>INICIAR SESIÓN</h1>
+      </div>
 
-      <form id="loginForm" class="auth-form">
-        <label>Usuario
-          <input id="loginEmail" type="text" autocomplete="username" placeholder="r.cardenas" required />
-        </label>
-        <label>Contraseña
-          <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
-        </label>
-        <button class="btn btn-primary" type="submit">Ingresar</button>
-      </form>
+      <div class="login-body">
+        <div id="authMessage" class="auth-message"></div>
 
-      <div class="auth-note">
-        Las cuentas se crean y autorizan únicamente desde Supabase por el Administrador TIC.
-        No existe registro público desde esta página.
+        <form id="loginForm" class="auth-form praxis-login-form">
+          <label class="login-field">Usuario:
+            <input id="loginEmail" type="text" autocomplete="username" placeholder="" required />
+          </label>
+
+          <label class="login-field">Contraseña:
+            <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
+          </label>
+
+          <div class="login-actions">
+            <button class="login-submit" type="submit">Iniciar sesión</button>
+          </div>
+        </form>
       </div>
     </div>
   </section>

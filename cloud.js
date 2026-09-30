@@ -27,14 +27,41 @@ const PraxisCloud = (() => {
     return raw.includes("@") ? raw : raw+"@praxis.edu.pe";
   }
 
-  async function signIn(email,password) {
+  async function signIn(identifier,password) {
     const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
-    email=normalizeInstitutionalEmail(email);
-    const {data,error}=await c.auth.signInWithPassword({email,password});
-    if(error) throw error;
+    const raw=String(identifier||"").trim();
+
+    let session=null;
+
+    if(/^\d{8}$/.test(raw)){
+      const res=await fetch(cfg().url+"/functions/v1/login-dni",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "apikey":cfg().anonKey
+        },
+        body:JSON.stringify({dni:raw,password})
+      });
+      const payload=await res.json().catch(()=>({}));
+      if(!res.ok || !payload?.access_token || !payload?.refresh_token){
+        throw new Error("INVALID_LOGIN");
+      }
+      const {data,error}=await c.auth.setSession({
+        access_token:payload.access_token,
+        refresh_token:payload.refresh_token
+      });
+      if(error) throw error;
+      session=data.session;
+    } else {
+      const email=normalizeInstitutionalEmail(raw);
+      const {data,error}=await c.auth.signInWithPassword({email,password});
+      if(error) throw error;
+      session=data.session;
+    }
+
     await loadProfile();
     try { await c.rpc("touch_login"); } catch(err) { console.warn("No se pudo registrar último acceso",err); }
-    return data.session;
+    return session;
   }
 
   async function bootstrapAdmin() {

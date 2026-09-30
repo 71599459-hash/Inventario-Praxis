@@ -258,3 +258,21 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   .login-bottom-row{grid-column:1;min-height:44px;margin-top:0}
   .praxis-login-card .auth-message{flex:1;width:auto}
 }
+
+/* El login institucional no muestra avisos ni cajas de error. */
+.praxis-login-card .auth-message,
+.praxis-login-card .auth-message.show,
+.praxis-login-card .auth-message.error,
+.praxis-login-card .auth-message.info{
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  overflow:hidden !important;
+}
+.login-bottom-row{
+  justify-content:flex-end;
+}

@@ -1250,16 +1250,10 @@
   }
 
   function showLogin(message="",type="info") {
-    $("#loginForm").classList.remove("hidden");
-    $("#registerForm").classList.add("hidden");
-    $("#authSubtitle").textContent="Acceso institucional al inventario centralizado.";
-    showAuth(message,type);
-  }
-
-  function showRegister(message="",type="info") {
-    $("#loginForm").classList.add("hidden");
-    $("#registerForm").classList.remove("hidden");
-    $("#authSubtitle").textContent="Registro de acceso al sistema.";
+    const form=$("#loginForm");
+    const subtitle=$("#authSubtitle");
+    if(form) form.classList.remove("hidden");
+    if(subtitle) subtitle.textContent="Acceso exclusivo para personal autorizado por TIC.";
     showAuth(message,type);
   }
 
@@ -1277,58 +1271,6 @@
   }
 
   function wireAuthControls() {
-    const showRegisterBtn=$("#showRegisterBtn");
-    if(showRegisterBtn) showRegisterBtn.onclick=()=>{
-      const loginEmail=$("#loginEmail");
-      const regEmail=$("#regEmail");
-      if(regEmail) regEmail.value=PraxisCloud.normalizeInstitutionalEmail(loginEmail?.value||"");
-      showRegister();
-      setTimeout(()=>$("#regName")?.focus(),50);
-    };
-
-    const backBtn=$("#backToLoginBtn");
-    if(backBtn) backBtn.onclick=()=>{
-      const regEmail=$("#regEmail")?.value?.trim()||"";
-      if(regEmail && $("#loginEmail")) $("#loginEmail").value=regEmail.replace(/@praxis\.edu\.pe$/i,"");
-      showLogin();
-    };
-
-    const registerForm=$("#registerForm");
-    if(registerForm) registerForm.onsubmit=async e=>{
-      e.preventDefault();
-      const nombre=$("#regName")?.value?.trim()||"";
-      const dni=$("#regDni")?.value?.trim()||"";
-      const cargo=$("#regCargo")?.value?.trim()||"";
-      const sede=$("#regSede")?.value?.trim()||"";
-      const area=$("#regArea")?.value?.trim()||"";
-      const email=$("#regEmail")?.value?.trim()||"";
-      const password=$("#regPassword")?.value||"";
-      const confirmPassword=$("#regPassword2")?.value||"";
-
-      if(password!==confirmPassword){
-        showRegister("Las contraseñas no coinciden.","error");
-        return;
-      }
-
-      const button=registerForm.querySelector("button[type='submit']");
-      const previous=button?.textContent||"Crear acceso al sistema";
-      if(button){button.disabled=true;button.textContent="Creando acceso…";}
-      try{
-        const data=await PraxisCloud.signUp({email,password,nombre,dni,cargo,sede,area});
-        if(data?.session){
-          await enterCloudApp();
-        }else{
-          if($("#loginEmail")) $("#loginEmail").value=PraxisCloud.normalizeInstitutionalEmail(email).replace(/@praxis\.edu\.pe$/i,"");
-          showLogin("Acceso creado. Ya puedes iniciar sesión.","info");
-        }
-      }catch(err){
-        console.error("Registro falló",err);
-        showRegister((err&&err.message)||"No se pudo crear el acceso.","error");
-      }finally{
-        if(button){button.disabled=false;button.textContent=previous;}
-      }
-    };
-
     const loginForm=$("#loginForm");
     if(loginForm) loginForm.onsubmit=async e=>{
       e.preventDefault();
@@ -1341,7 +1283,8 @@
         await enterCloudApp();
       } catch(err) {
         console.error("Login falló",err);
-        showLogin((err&&err.message)||"No se pudo iniciar sesión.","error");
+        const msg=(err&&err.message)||"No se pudo iniciar sesión.";
+        showLogin(msg,"error");
       }
     };
   }

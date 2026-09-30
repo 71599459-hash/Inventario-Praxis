@@ -38,6 +38,73 @@ create table if not exists public.profiles (
 alter table public.profiles alter column activo set default false;
 alter table public.profiles add column if not exists last_login_at timestamptz;
 
+-- Las cuentas se crean manualmente desde Supabase. Esta tabla define quién queda autorizado.
+create or replace function public.sync_authorized_account_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, auth
+as $
+declare
+  v_user_id uuid;
+begin
+  select id into v_user_id
+  from auth.users
+  where lower(email)=lower(new.email)
+  limit 1;
+
+  if v_user_id is not null then
+    update public.profiles
+       set nombre=coalesce(nullif(new.nombre,''),nombre),
+           role=new.role,
+           activo=new.activo,
+           updated_at=now()
+     where id=v_user_id;
+  end if;
+
+  return new;
+end;
+$;
+
+drop trigger if exists sync_authorized_account_profile_trg on public.authorized_accounts;
+create trigger sync_authorized_account_profile_trg
+after insert or update on public.authorized_accounts
+for each row execute function public.sync_authorized_account_profile();
+
+create or replace function public.deactivate_removed_authorized_account()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, auth
+as $
+declare
+  v_user_id uuid;
+begin
+  select id into v_user_id
+  from auth.users
+  where lower(email)=lower(old.email)
+  limit 1;
+
+  if v_user_id is not null then
+    update public.profiles
+       set activo=false,
+           updated_at=now()
+     where id=v_user_id;
+  end if;
+
+  return old;
+end;
+$;
+
+drop trigger if exists deactivate_removed_authorized_account_trg on public.authorized_accounts;
+create trigger deactivate_removed_authorized_account_trg
+after delete on public.authorized_accounts
+for each row execute function public.deactivate_removed_authorized_account();
+
+revoke all on function public.sync_authorized_account_profile() from public, anon, authenticated;
+revoke all on function public.deactivate_removed_authorized_account() from public, anon, authenticated;
+
+
 create table if not exists public.inventory_state (
   id integer primary key default 1 check (id = 1),
   state jsonb,

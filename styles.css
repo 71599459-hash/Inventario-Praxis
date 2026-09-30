@@ -276,3 +276,6 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .login-bottom-row{
   justify-content:flex-end;
 }
+
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+@media(max-width:700px){.panel-actions{width:100%;justify-content:flex-start}}

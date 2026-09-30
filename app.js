@@ -10,6 +10,7 @@
   let cloudMode = false;
   let currentProfile = null;
   let realtimeChannel = null;
+  let accessChannel = null;
 
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
@@ -40,22 +41,34 @@
   }
 
   async function persist(action="ACTUALIZAR_INVENTARIO") {
-    await PraxisDB.set(STATE_KEY, state);
-    if (!cloudMode || !PraxisCloud.configured()) return true;
+    if (!cloudMode || !PraxisCloud.configured()) {
+      await PraxisDB.set(STATE_KEY,state);
+      return true;
+    }
+
     try {
-      await PraxisCloud.saveState(state, action);
+      await PraxisCloud.saveState(state,action);
+      try{ await PraxisDB.set(STATE_KEY,state); }catch(err){ console.warn("No se pudo actualizar la caché local",err); }
       return true;
     } catch (err) {
       console.error(err);
-      if (err && err.message === "VERSION_CONFLICT") {
-        const latest = await PraxisCloud.loadState();
-        state = latest.state;
-        await PraxisDB.set(STATE_KEY, state);
+      try{
+        const latest=await PraxisCloud.loadState();
+        state=latest.state;
+        try{ if(state) await PraxisDB.set(STATE_KEY,state); }catch(_){}
         renderAll();
-        toast("Otro usuario actualizó el inventario. Se recargó la versión más reciente; vuelve a realizar tu cambio.","error");
-        throw err;
+      }catch(reloadErr){
+        console.error("No se pudo restaurar el estado remoto",reloadErr);
       }
-      toast((err && err.message) || "No se pudo guardar en la base de datos.","error");
+
+      const raw=String(err?.message||"");
+      if(raw==="VERSION_CONFLICT" || raw.includes("VERSION_CONFLICT")){
+        toast("Otro usuario actualizó el inventario. Se recargó la versión más reciente.","error");
+      }else if(raw.includes("READ_ONLY_ROLE")){
+        toast("Tu usuario es de Solo lectura. No puede realizar cambios.","error");
+      }else{
+        toast(raw||"No se pudo guardar en la base de datos.","error");
+      }
       throw err;
     }
   }
@@ -75,14 +88,14 @@
 
   function ensureEditable() {
     if (canEdit()) return true;
-    toast("Tu usuario tiene rol CONSULTA. No puede modificar el inventario.","error");
+    toast("Tu usuario es de Solo lectura. No puede modificar el inventario.","error");
     return false;
   }
 
   const roleLabel = role => ({
     ADMIN_TIC:"Administrador TIC",
     EDITOR:"Editor",
-    CONSULTA:"Consulta"
+    CONSULTA:"Solo lectura"
   }[role] || role || "Local");
 
   const fmtDateTime = value => {
@@ -1355,7 +1368,7 @@
         [pendingCount,"Pendientes / bloqueados"],
         [admins,"Cuenta Master"],
         [editors,"Editores"],
-        [consult,"Solo consulta"]
+        [consult,"Solo lectura"]
       ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
 
       const users=allUsers.filter(u=>{
@@ -1379,7 +1392,7 @@
           ? '<select class="role-select" disabled><option selected>MASTER TIC</option></select>'
           : `<select class="role-select" data-role-user="${esc(u.id)}">
               <option value="EDITOR" ${u.role==="EDITOR"?"selected":""}>Editor</option>
-              <option value="CONSULTA" ${u.role==="CONSULTA"?"selected":""}>Consulta</option>
+              <option value="CONSULTA" ${u.role==="CONSULTA"?"selected":""}>Solo lectura</option>
             </select>`;
 
         return `<tr>
@@ -1524,6 +1537,44 @@
     }
 
     try{
+      if(accessChannel) await PraxisCloud.unsubscribe(accessChannel);
+      accessChannel=PraxisCloud.subscribeProfile(async latestProfile=>{
+        const previousRole=currentProfile?.role;
+        const previousActive=currentProfile?.activo;
+        currentProfile=latestProfile;
+
+        if(!currentProfile?.activo){
+          try{
+            if(realtimeChannel) await PraxisCloud.unsubscribe(realtimeChannel);
+            if(accessChannel) await PraxisCloud.unsubscribe(accessChannel);
+          }catch(_){}
+          realtimeChannel=null;
+          accessChannel=null;
+          await PraxisCloud.signOut();
+          state=null;
+          showLogin();
+          return;
+        }
+
+        updateProfileUI();
+
+        if(previousRole!==currentProfile.role || previousActive!==currentProfile.activo){
+          if(!canEdit()){
+            closeModal();
+            setView("dashboard");
+          }
+          renderAll();
+          toast(currentProfile.role==="CONSULTA"
+            ? "Tu acceso cambió a Solo lectura."
+            : "Tus permisos de acceso fueron actualizados.","success");
+        }
+      });
+    }catch(err){
+      console.warn("No se pudo sincronizar el rol del usuario en tiempo real.",err);
+      accessChannel=null;
+    }
+
+    try{
       renderAll();
       setView("dashboard");
     }catch(err){
@@ -1620,6 +1671,7 @@
 
     const doLogout=async()=>{
       if(realtimeChannel){await PraxisCloud.unsubscribe(realtimeChannel);realtimeChannel=null;}
+      if(accessChannel){await PraxisCloud.unsubscribe(accessChannel);accessChannel=null;}
       await PraxisCloud.signOut();
       state=null;currentProfile=null;
       showLogin("Sesión cerrada correctamente.","info");

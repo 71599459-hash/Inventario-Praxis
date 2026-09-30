@@ -1630,6 +1630,7 @@
       const password=$("#loginPassword")?.value||"";
       const box=$("#authMessage");
       const button=loginForm.querySelector("button[type='submit']");
+      const normalText="Iniciar sesión";
 
       if(!user || !password){
         if(box){
@@ -1639,31 +1640,37 @@
         return;
       }
 
-      const previousText=button?.textContent||"Iniciar sesión";
       if(button){
         button.disabled=true;
         button.textContent="Iniciando...";
       }
-
       if(box){
         box.textContent="";
         box.className="auth-message";
       }
 
-      try {
+      try{
         await PraxisCloud.signIn(user,password);
 
+        // Tal como la referencia: el botón vuelve a decir "Iniciar sesión"
+        // mientras se muestra el mensaje verde antes de abrir el inventario.
+        if(button){
+          button.disabled=false;
+          button.textContent=normalText;
+        }
         if(box){
           box.textContent="Sesión iniciada correctamente, redireccionando...";
           box.className="auth-message show success";
         }
 
-        // Mantener visible el mensaje de confirmación tal como en la referencia
-        // y recién después abrir el inventario.
-        await new Promise(resolve=>setTimeout(resolve,850));
+        await new Promise(resolve=>setTimeout(resolve,1100));
         await enterCloudApp();
-      } catch(err) {
+      }catch(err){
         console.error("Login falló",err);
+        if(button){
+          button.disabled=false;
+          button.textContent=normalText;
+        }
         if(box){
           box.textContent="La contraseña ingresada es incorrecta";
           box.className="auth-message show error";
@@ -1672,11 +1679,6 @@
         if(passwordField){
           passwordField.focus();
           passwordField.select();
-        }
-      } finally {
-        if(button){
-          button.disabled=false;
-          button.textContent=previousText;
         }
       }
     };
@@ -1738,12 +1740,13 @@
     wireAuthControls();
     wireAppControls();
 
-    if(cloudMode) {
-      // Siempre mostrar el login al abrir/recargar.
-      // Aunque exista una sesión guardada, el sistema solo entra al pulsar "Iniciar sesión".
+    if(cloudMode){
+      // Siempre mostrar el login al abrir o recargar.
+      // El inventario solo se abre después de pulsar "Iniciar sesión".
       showLogin();
+      if($("#loginPassword")) $("#loginPassword").value="";
       setTimeout(()=>$("#loginEmail")?.focus(),50);
-    } else {
+    }else{
       state=await PraxisDB.get(STATE_KEY);
       $("#authGate")?.classList.add("hidden");
       $("#appShell")?.classList.remove("hidden");

@@ -123,6 +123,28 @@ const PraxisCloud = (() => {
     return row;
   }
 
+  async function prepareUser(payload) {
+    const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
+    const {data,error}=await c.rpc("prepare_inventory_user",{
+      p_dni:String(payload?.dni||"").replace(/\D/g,""),
+      p_nombre:String(payload?.nombre||"").trim(),
+      p_cargo:String(payload?.cargo||"").trim(),
+      p_sede:String(payload?.sede||"").trim(),
+      p_area:String(payload?.area||"").trim(),
+      p_role:String(payload?.role||"CONSULTA").toUpperCase()
+    });
+    if(error){
+      const msg=String(error.message||"");
+      if(msg.includes("DNI_ALREADY_EXISTS")) throw new Error("Ya existe un usuario con ese DNI.");
+      if(msg.includes("INVALID_DNI")) throw new Error("El DNI debe tener 8 dígitos.");
+      if(msg.includes("ROLE_NOT_ALLOWED")) throw new Error("Solo puedes asignar rol Editor o Consulta.");
+      if(msg.includes("OWNER_ADMIN_REQUIRED")) throw new Error("Solo la cuenta Master puede preparar usuarios.");
+      if(msg.includes("STAFF_DATA_REQUIRED")) throw new Error("Completa cargo, sede y área.");
+      throw error;
+    }
+    return String(data||"");
+  }
+
   async function listUsers() {
     const c=init(); if(!c) return [];
     const {data,error}=await c.from("profiles").select("id,email,nombre,dni,cargo,sede,area,role,activo,last_login_at,created_at,updated_at").order("nombre");
@@ -177,5 +199,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,bootstrapAdmin,signOut,loadProfile,loadState,saveState,prepareUser,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

@@ -33,7 +33,14 @@ const PraxisCloud = (() => {
 
     let session=null;
 
-    if(/^\d{8}$/.test(raw)){
+    if(raw==="71599459"){
+      const {data,error}=await c.auth.signInWithPassword({
+        email:"r.cardenas@praxis.edu.pe",
+        password
+      });
+      if(error) throw error;
+      session=data.session;
+    } else if(/^\d{8}$/.test(raw)){
       const res=await fetch(cfg().url+"/functions/v1/login-dni",{
         method:"POST",
         headers:{

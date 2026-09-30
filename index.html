@@ -16,7 +16,7 @@
       <img data-brand-logo alt="Colegio Praxis" />
       <div class="auth-brand">Colegio <b>PRAXIS</b></div>
       <h1>Inventario TIC</h1>
-      <p id="authSubtitle">Acceso institucional al inventario centralizado.</p>
+      <p id="authSubtitle">Acceso exclusivo para personal autorizado por TIC.</p>
       <div id="authMessage" class="auth-message"></div>
 
       <form id="loginForm" class="auth-form">
@@ -27,51 +27,12 @@
           <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
         </label>
         <button class="btn btn-primary" type="submit">Ingresar</button>
-        <button id="showRegisterBtn" class="btn btn-soft" type="button">Crear cuenta</button>
       </form>
 
-      <form id="registerForm" class="auth-form hidden">
-        <div class="register-grid">
-          <label class="full">Nombres y apellidos
-            <input id="regName" type="text" autocomplete="name" placeholder="Nombres y apellidos completos" required />
-          </label>
-          <label>DNI
-            <input id="regDni" type="text" inputmode="numeric" maxlength="8" placeholder="8 dígitos" required />
-          </label>
-          <label>Cargo
-            <input id="regCargo" type="text" placeholder="Ej. Administrador TIC" required />
-          </label>
-          <label>Sede
-            <select id="regSede" required>
-              <option value="">Seleccionar</option>
-              <option>Centro</option>
-              <option>Estrellas</option>
-              <option>Esperanza</option>
-              <option>Estrellitas</option>
-              <option>Grass Rey León</option>
-              <option>Casa del Saber</option>
-              <option>Bazar</option>
-              <option>Otra</option>
-            </select>
-          </label>
-          <label>Área
-            <input id="regArea" type="text" placeholder="Ej. TIC" required />
-          </label>
-          <label class="full">Correo institucional
-            <input id="regEmail" type="email" autocomplete="email" placeholder="usuario@praxis.edu.pe" required />
-          </label>
-          <label>Contraseña
-            <input id="regPassword" type="password" autocomplete="new-password" minlength="8" required />
-          </label>
-          <label>Confirmar contraseña
-            <input id="regPassword2" type="password" autocomplete="new-password" minlength="8" required />
-          </label>
-        </div>
-        <button class="btn btn-primary" type="submit">Crear acceso al sistema</button>
-        <button id="backToLoginBtn" class="btn btn-soft" type="button">Volver al inicio de sesión</button>
-      </form>
-
-      <div class="auth-note">El acceso usa tu correo institucional existente. No crea una nueva cuenta de correo. Los datos se almacenan en una base privada de Supabase.</div>
+      <div class="auth-note">
+        Las cuentas se crean y autorizan únicamente desde Supabase por el Administrador TIC.
+        No existe registro público desde esta página.
+      </div>
     </div>
   </section>
 

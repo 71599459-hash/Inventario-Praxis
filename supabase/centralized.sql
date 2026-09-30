@@ -154,6 +154,23 @@ as $$
   )
 $$;
 
+create or replace function public.is_praxis_owner_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select exists (
+    select 1
+    from auth.users u
+    join public.profiles p on p.id=u.id
+    where u.id=auth.uid()
+      and lower(u.email)='r.cardenas@praxis.edu.pe'
+      and p.activo=true
+  )
+$$;
+
 create or replace function public.current_praxis_role()
 returns praxis_role
 language sql
@@ -357,14 +374,12 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.uid() is null or public.current_praxis_role() <> 'ADMIN_TIC' then
-    raise exception 'ADMIN_REQUIRED';
+  if auth.uid() is null or not public.is_praxis_owner_admin() then
+    raise exception 'OWNER_ADMIN_REQUIRED';
   end if;
 
-  if p_user = auth.uid()
-     and p_role <> 'ADMIN_TIC'
-     and (select count(*) from public.profiles where role='ADMIN_TIC' and activo=true) <= 1 then
-    raise exception 'LAST_ADMIN';
+  if p_user = auth.uid() and p_role <> 'ADMIN_TIC' then
+    raise exception 'OWNER_ROLE_LOCKED';
   end if;
 
   update public.profiles
@@ -382,23 +397,13 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_target_role praxis_role;
 begin
-  if auth.uid() is null or public.current_praxis_role() <> 'ADMIN_TIC' then
-    raise exception 'ADMIN_REQUIRED';
+  if auth.uid() is null or not public.is_praxis_owner_admin() then
+    raise exception 'OWNER_ADMIN_REQUIRED';
   end if;
-
-  select role into v_target_role from public.profiles where id=p_user;
 
   if p_user = auth.uid() and p_active=false then
-    raise exception 'CANNOT_DISABLE_SELF';
-  end if;
-
-  if v_target_role='ADMIN_TIC'
-     and p_active=false
-     and (select count(*) from public.profiles where role='ADMIN_TIC' and activo=true) <= 1 then
-    raise exception 'LAST_ADMIN';
+    raise exception 'CANNOT_DISABLE_OWNER';
   end if;
 
   update public.profiles
@@ -422,7 +427,7 @@ alter table public.audit_events enable row level security;
 drop policy if exists profiles_read_self_or_admin on public.profiles;
 create policy profiles_read_self_or_admin on public.profiles
 for select to authenticated
-using (id = auth.uid() or public.current_praxis_role() = 'ADMIN_TIC');
+using (id = auth.uid() or public.is_praxis_owner_admin());
 
 drop policy if exists inventory_read_authorized on public.inventory_state;
 drop policy if exists inventory_read_authenticated on public.inventory_state;
@@ -439,7 +444,7 @@ using (public.current_praxis_authorized());
 drop policy if exists audit_read_admin on public.audit_events;
 create policy audit_read_admin on public.audit_events
 for select to authenticated
-using (public.current_praxis_role() = 'ADMIN_TIC');
+using (public.is_praxis_owner_admin());
 
 -- La lista previa de cuentas autorizadas no se expone al navegador.
 revoke all on table public.authorized_accounts from anon, authenticated;
@@ -569,3 +574,11 @@ begin
   end if;
 end
 $$;
+
+
+create unique index if not exists profiles_dni_unique_idx
+on public.profiles (dni)
+where dni is not null and btrim(dni) <> '';
+
+revoke all on function public.is_praxis_owner_admin() from public, anon;
+grant execute on function public.is_praxis_owner_admin() to authenticated;

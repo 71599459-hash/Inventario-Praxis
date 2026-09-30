@@ -1283,12 +1283,12 @@
         await enterCloudApp();
       } catch(err) {
         console.error("Login falló",err);
-        const raw=String((err&&err.message)||"").toLowerCase();
-        let msg=(err&&err.message)||"No se pudo iniciar sesión.";
-        if(raw.includes("invalid login credentials") || raw.includes("invalid credentials")){
-          msg="La contraseña ingresada es incorrecta";
+        showLogin();
+        const passwordField=$("#loginPassword");
+        if(passwordField){
+          passwordField.value="";
+          passwordField.focus();
         }
-        showLogin(msg,"error");
       }
     };
   }

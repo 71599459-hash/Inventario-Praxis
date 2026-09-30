@@ -1353,19 +1353,42 @@
 
     const remote=await PraxisCloud.loadState();
     state=remote.state;
-    if(state) await PraxisDB.set(STATE_KEY,state);
-    if(realtimeChannel) await PraxisCloud.unsubscribe(realtimeChannel);
-    realtimeChannel=PraxisCloud.subscribeState(async latest=>{
-      state=latest.state;
-      if(state) await PraxisDB.set(STATE_KEY,state);
-      renderAll();
-      toast("El inventario se actualizó desde otro usuario.","success");
-    });
-    $("#authGate").classList.add("hidden");
-    $("#appShell").classList.remove("hidden");
+
+    // La sesión ya fue validada por Supabase. Desde este punto ningún fallo
+    // de caché local o tiempo real debe devolver al usuario al login.
+    $("#authGate")?.classList.add("hidden");
+    $("#appShell")?.classList.remove("hidden");
     updateProfileUI();
-    renderAll();
-    setView("dashboard");
+
+    try{
+      if(state) await PraxisDB.set(STATE_KEY,state);
+    }catch(err){
+      console.warn("No se pudo guardar la caché local; se continuará con Supabase.",err);
+    }
+
+    try{
+      if(realtimeChannel) await PraxisCloud.unsubscribe(realtimeChannel);
+      realtimeChannel=PraxisCloud.subscribeState(async latest=>{
+        state=latest.state;
+        try{ if(state) await PraxisDB.set(STATE_KEY,state); }catch(err){ console.warn("Caché local no disponible",err); }
+        try{ renderAll(); }catch(err){ console.error("Error al refrescar inventario",err); }
+      });
+    }catch(err){
+      console.warn("Tiempo real no disponible; el sistema seguirá funcionando.",err);
+      realtimeChannel=null;
+    }
+
+    try{
+      renderAll();
+      setView("dashboard");
+    }catch(err){
+      console.error("Error al pintar el panel",err);
+      const workspace=$("#workspace");
+      const empty=$("#emptyState");
+      if(workspace) workspace.classList.remove("hidden");
+      if(empty) empty.classList.add("hidden");
+      toast("Sesión iniciada. Ocurrió un problema al mostrar una sección del panel; recarga la página.","error");
+    }
   }
 
   function showAuth(message,type) {

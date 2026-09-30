@@ -19,18 +19,19 @@
       </div>
 
       <div class="login-body">
-        <div id="authMessage" class="auth-message"></div>
-
-        <form id="loginForm" class="auth-form praxis-login-form">
-          <label class="login-field">Usuario:
-            <input id="loginEmail" type="text" autocomplete="username" placeholder="" required />
+        <form id="loginForm" class="praxis-login-form">
+          <label class="login-field">
+            <span>Usuario:</span>
+            <input id="loginEmail" type="text" autocomplete="username" required />
           </label>
 
-          <label class="login-field">Contraseña:
-            <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
+          <label class="login-field">
+            <span>Contraseña:</span>
+            <input id="loginPassword" type="password" autocomplete="current-password" required />
           </label>
 
-          <div class="login-actions">
+          <div class="login-bottom-row">
+            <div id="authMessage" class="auth-message"></div>
             <button class="login-submit" type="submit">Iniciar sesión</button>
           </div>
         </form>

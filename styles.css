@@ -121,8 +121,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .praxis-login-logo{
   display:block !important;
-  width:176px !important;
-  height:60px !important;
+  width:184px !important;
+  height:63px !important;
   max-width:none !important;
   max-height:none !important;
   margin:0 0 7px 0 !important;
@@ -147,7 +147,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .praxis-login-body{
   height:163px;
-  padding:18px 16px 15px;
+  padding:16px 16px 17px;
   background:#fff;
 }
 

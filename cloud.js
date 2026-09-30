@@ -147,7 +147,7 @@ const PraxisCloud = (() => {
 
   async function listUsers() {
     const c=init(); if(!c) return [];
-    const {data,error}=await c.from("profiles").select("id,email,nombre,dni,cargo,sede,area,role,activo,last_login_at,created_at,updated_at").order("nombre");
+    const {data,error}=await c.rpc("admin_list_users");
     if(error) throw error;
     return data||[];
   }
@@ -170,6 +170,20 @@ const PraxisCloud = (() => {
     const {data,error}=await c.from("audit_events").select("*").order("created_at",{ascending:false}).limit(limit);
     if(error) throw error;
     return data||[];
+  }
+
+  function subscribeProfile(onProfileChange) {
+    const c=init();
+    if(!c || !profile?.id) return null;
+    const channel=c.channel("praxis-profile-"+profile.id)
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"profiles",filter:"id=eq."+profile.id},async()=>{
+        try{
+          const latest=await loadProfile();
+          if(typeof onProfileChange==="function") onProfileChange(latest);
+        }catch(err){ console.error("Realtime profile reload failed",err); }
+      })
+      .subscribe();
+    return channel;
   }
 
   function subscribeState(onRemoteState) {
@@ -199,5 +213,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,bootstrapAdmin,signOut,loadProfile,loadState,saveState,prepareUser,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,bootstrapAdmin,signOut,loadProfile,loadState,saveState,prepareUser,listUsers,setUserRole,setUserActive,audit,subscribeProfile,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

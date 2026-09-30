@@ -2,6 +2,7 @@
 (() => {
   const STATE_KEY = "praxis-state-v2";
   const PAGE_SIZE = 30;
+  const OWNER_ADMIN_EMAIL = "r.cardenas@praxis.edu.pe";
   let state = null;
   let currentView = "dashboard";
   let page = 1;
@@ -67,6 +68,11 @@
     return cloudMode && PraxisCloud.isAdmin();
   }
 
+  function canManageUsers() {
+    const p=currentProfile || PraxisCloud.getProfile();
+    return Boolean(cloudMode && p?.activo && String(p.email||"").toLowerCase()===OWNER_ADMIN_EMAIL);
+  }
+
   function ensureEditable() {
     if (canEdit()) return true;
     toast("Tu usuario tiene rol CONSULTA. No puede modificar el inventario.","error");
@@ -94,7 +100,7 @@
     if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = displayName;
     if ($("#sidebarProfileRole")) $("#sidebarProfileRole").textContent = displayRole;
     $$(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
-    $$(".admin-only").forEach(el=>el.classList.toggle("hidden",!isAdmin()));
+    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!canManageUsers()));
     $$(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 
@@ -145,7 +151,7 @@
     };
     $("#pageTitle").textContent = titles[view][0];
     $("#pageSubtitle").textContent = titles[view][1];
-    if (view === "users" && isAdmin()) { renderUsers(); renderAudit(); }
+    if (view === "users") { if(!canManageUsers()){ setView("dashboard"); return; } renderUsers(); renderAudit(); }
     if (window.innerWidth < 850) $("#sidebar").classList.remove("open");
   }
 
@@ -372,6 +378,69 @@
   }
   function closeModal(){ $("#modal").classList.remove("open");$("#modal").setAttribute("aria-hidden","true") }
 
+  function openAddAsset() {
+    if(!ensureEditable()) return;
+    showModal("Agregar equipo","Crea un único registro maestro. El Código TIC no puede repetirse.",`
+      <div id="formAlert"></div>
+      <div class="form-grid">
+        <div class="form-field"><label>Código TIC *</label><input id="nCode" placeholder="Ej. MON-000100"></div>
+        <div class="form-field"><label>Código Padre TIC</label><input id="nParent"></div>
+        <div class="form-field"><label>Equipo / material *</label><input id="nEquipment" placeholder="Ej. MONITOR"></div>
+        <div class="form-field"><label>Descripción</label><input id="nDescription"></div>
+        <div class="form-field"><label>Marca</label><input id="nBrand"></div>
+        <div class="form-field"><label>Modelo</label><input id="nModel"></div>
+        <div class="form-field"><label>Serie o código</label><input id="nSerial"></div>
+        <div class="form-field"><label>Estado</label><input id="nStatus" value="OPERATIVO"></div>
+        <div class="form-field"><label>Condición</label><input id="nCondition"></div>
+        <div class="form-field"><label>Situación</label><input id="nSituation" value="INTERNO"></div>
+        <div class="form-field"><label>Sede</label><input id="nSite"></div>
+        <div class="form-field"><label>Área / aula</label><input id="nArea"></div>
+        <div class="form-field full"><label>Responsable</label><input id="nPerson"></div>
+        <div class="form-field"><label>DNI</label><input id="nDni" maxlength="8"></div>
+        <div class="form-field full"><label>Observaciones</label><textarea id="nObs"></textarea></div>
+      </div>
+      <div class="modal-actions"><button id="saveNewAsset" class="btn btn-primary">Guardar equipo</button></div>
+    `);
+
+    $("#saveNewAsset").onclick=async()=>{
+      const alert=$("#formAlert");
+      const code=PraxisExcel.cleanCode($("#nCode").value);
+      const equipment=norm($("#nEquipment").value);
+      if(!code){alert.className="alert error";alert.textContent="El Código TIC es obligatorio.";return}
+      if(!equipment){alert.className="alert error";alert.textContent="Equipo / Material es obligatorio.";return}
+      const duplicate=activeInventory().find(x=>x.codigo && norm(x.codigo)===code);
+      if(duplicate){
+        alert.className="alert error";
+        alert.innerHTML=`El Código TIC <b>${esc(code)}</b> ya existe. Abre ese registro y actualízalo; no se creará un duplicado.`;
+        return;
+      }
+      const serial=$("#nSerial").value.trim();
+      const duplicateSerial=serial&&activeInventory().find(x=>x.serie&&norm(x.serie)===norm(serial));
+      if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`)) return;
+
+      const responsable=$("#nPerson").value.trim();
+      const area=$("#nArea").value.trim();
+      const record={
+        id:code,codigo:code,codigoPadre:PraxisExcel.cleanCode($("#nParent").value),
+        equipo:equipment,descripcion:$("#nDescription").value.trim(),detalle:"",
+        marca:norm($("#nBrand").value),modelo:$("#nModel").value.trim(),serie:serial,
+        sede:norm($("#nSite").value),area,responsable,dni:$("#nDni").value.trim(),
+        estado:norm($("#nStatus").value),condicion:norm($("#nCondition").value),
+        situacion:norm($("#nSituation").value),observaciones:$("#nObs").value.trim(),
+        source:"Web",cantidad:"1",
+        locationType:norm(area).includes("ALMAC")?"ALMACEN":responsable?"ASIGNADO":"SEDE",
+        needsReview:false,conflictLocations:[],conflictRecords:[],duplicateSources:1,
+        history:[{type:"WEB",source:"Alta web",fecha:today(),sede:norm($("#nSite").value),area,responsable,estado:norm($("#nStatus").value),observaciones:"Registro creado desde Inventario Praxis"}]
+      };
+      state.inventory=state.inventory||[];
+      state.inventory.push(record);
+      state.webMovements=state.webMovements||[];
+      state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:code,equipo:equipment,from:"",to:[record.sede,area,responsable].filter(Boolean).join(" / "),responsable,observaciones:record.observaciones});
+      await persist("ALTA_EQUIPO");
+      closeModal();page=1;renderAll();toast("Equipo agregado sin duplicar el Código TIC.","success");
+    };
+  }
+
   function openAsset(id) {
     const r=activeInventory().find(x=>x.id===id); if(!r)return; selectedId=id;
     const fields=[
@@ -530,7 +599,9 @@
       const newSite=$("#mSede").value.trim().toUpperCase(), newArea=$("#mArea").value.trim(), newResp=$("#mResp").value.trim(), motivo=$("#mObs").value.trim();
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Movimiento web",fecha:today(),sede:oldSite,area:oldArea,responsable:oldResp,estado:r.estado,observaciones:`Ubicación anterior. ${motivo}`});
-      r.sede=newSite;r.area=newArea;r.responsable=newResp;r.locationType=norm(newArea).includes("ALMAC")?"ALMACEN":newResp?"ASIGNADO":"SEDE";
+      r.sede=newSite;r.area=newArea;r.responsable=newResp;
+      if(toWarehouse || norm(newArea).includes("ALMAC")) r.dni="";
+      r.locationType=norm(newArea).includes("ALMAC")?"ALMACEN":newResp?"ASIGNADO":"SEDE";
       r.needsReview=false;
       r.conflictLocations=[];
       r.conflictRecords=[];
@@ -550,15 +621,64 @@
         <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
       </div>
       <div class="modal-actions">
+        <button id="editPersonCargo" class="btn btn-soft">Editar datos</button>
         <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
         <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
       </div>
-      <div class="alert info"><b>Ficha técnica de cargo:</b> se imprime una sola hoja con la <b>Revisión Inicial</b> fechada y la <b>Revisión Final</b> en blanco. Esa misma hoja física se conserva y se completa al finalizar la entrega.</div>
       <h4 class="section-title">Equipos a cargo</h4>${tableHtml(items,false)}
     `);
+    $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
     $("#printCargo").onclick=()=>printCargo(p);
     $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.name;page=1;renderInventory()};
     wireTables();
+  }
+
+  function openEditPersonCargo(p) {
+    if(!ensureEditable()) return;
+    const settings=state.cargoSettings||{};
+    const sites=[...p.sites], areas=[...p.areas];
+    const defaultSite=sites.length===1?sites[0]:"";
+    const defaultArea=areas.length===1?areas[0]:"";
+    showModal("Editar datos del cargo","Los cambios del colaborador se aplican a los equipos que actualmente tiene a su cargo; no se duplica ningún Código TIC.",`
+      <div id="formAlert"></div>
+      <div class="form-grid">
+        <div class="form-field full"><label>Nombres y apellidos del usuario *</label><input id="pcName" value="${esc(p.name||"")}"></div>
+        <div class="form-field"><label>DNI</label><input id="pcDni" maxlength="8" value="${esc(p.dni||"")}"></div>
+        <div class="form-field"><label>Sede</label><input id="pcSite" value="${esc(defaultSite)}" placeholder="${sites.length>1?"Varias sedes":""}"></div>
+        <div class="form-field"><label>Área</label><input id="pcArea" value="${esc(defaultArea)}" placeholder="${areas.length>1?"Varias áreas":""}"></div>
+        <div class="form-field full"><label>Técnico / Responsable de Inf. Tec.</label><input id="pcTech" value="${esc(settings.technicianName||"CARDENAS CURISINCHE, ROBERTO ALEJANDRO")}"></div>
+        <div class="form-field full"><label>Jefe de TIC</label><input id="pcChief" value="${esc(settings.chiefName||TIC_HEAD_NAME)}"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="savePersonCargo" class="btn btn-primary">Guardar datos</button>
+      </div>
+    `);
+
+    $("#savePersonCargo").onclick=async()=>{
+      const name=$("#pcName").value.trim();
+      const dni=$("#pcDni").value.trim();
+      const sede=$("#pcSite").value.trim();
+      const area=$("#pcArea").value.trim();
+      const tech=$("#pcTech").value.trim();
+      const chief=$("#pcChief").value.trim();
+      const alert=$("#formAlert");
+      if(!name){alert.className="alert error";alert.textContent="El nombre del usuario es obligatorio.";return}
+      if(dni && !/^\d{8}$/.test(dni)){alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return}
+      if(!tech || !chief){alert.className="alert error";alert.textContent="Completa los nombres del técnico y del Jefe de TIC.";return}
+
+      p.items.forEach(r=>{
+        r.history=r.history||[];
+        r.history.unshift({type:"WEB",source:"Edición de colaborador",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Datos anteriores del responsable antes de editar el cargo"});
+        r.responsable=name;
+        r.dni=dni;
+        if(sede) r.sede=norm(sede);
+        if(area) r.area=area;
+        r.locationType=norm(r.area).includes("ALMAC")?"ALMACEN":r.responsable?"ASIGNADO":"SEDE";
+      });
+      state.cargoSettings={...(state.cargoSettings||{}),technicianName:tech,chiefName:chief};
+      await persist("EDITAR_COLABORADOR");
+      closeModal();renderAll();toast("Datos del cargo actualizados.","success");
+    };
   }
 
   const TIC_HEAD_NAME="FABIÁN PUENTE, FRANK JAIME";
@@ -728,8 +848,8 @@
       }
     }
 
-    const technician="CÁRDENAS CURISINCHE, ROBERTO ALEJANDRO";
-    const chief=TIC_HEAD_NAME;
+    const technician=state?.cargoSettings?.technicianName || "CARDENAS CURISINCHE, ROBERTO ALEJANDRO";
+    const chief=state?.cargoSettings?.chiefName || TIC_HEAD_NAME;
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
 
     const software=[
@@ -1001,7 +1121,7 @@
   function csvDownload(records, filename, columns) {
     const lines=[columns.map(c=>`"${c[0]}"`).join(";")];
     records.forEach(r=>lines.push(columns.map(([_,key])=>`"${String(r[key]??"").replace(/"/g,'""')}"`).join(";")));
-    const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});triggerDownload(blob,filename);
   }
 
   function exportInventory() {
@@ -1012,8 +1132,19 @@
     csvDownload([...(state.webMovements||[]),...(state.transactions||[])],"Movimientos_TIC_Praxis.csv",[["Fecha","fecha"],["Origen","source"],["Código TIC","codigo"],["Equipo","equipo"],["Desde","from"],["Hacia","to"],["Responsable","responsable"],["Observaciones","observaciones"]]);
   }
 
+  function triggerDownload(blob,filename) {
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=filename;a.style.display="none";
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+
   function downloadBackup() {
-    const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`Backup_Inventario_Praxis_${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    if(!state){toast("No hay información para generar la copia.","error");return}
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json;charset=utf-8"});
+    triggerDownload(blob,`Backup_Inventario_Praxis_${today()}.json`);
+    toast("Copia JSON generada.","success");
   }
 
   async function importExcel(file) {
@@ -1065,7 +1196,7 @@
   }
 
   async function renderUsers() {
-    if(!isAdmin() || !$("#usersTable")) return;
+    if(!canManageUsers() || !$("#usersTable")) return;
     try {
       const allUsers=await PraxisCloud.listUsers();
       const q=norm($("#authorizedSearch")?.value||"");
@@ -1162,7 +1293,7 @@
   }
 
   async function renderAudit() {
-    if(!isAdmin() || !$("#auditTable")) return;
+    if(!canManageUsers() || !$("#auditTable")) return;
     try {
       const [items,users]=await Promise.all([PraxisCloud.audit(100),PraxisCloud.listUsers()]);
       const userMap=new Map(users.map(u=>[u.id,u]));
@@ -1304,7 +1435,7 @@
     if($("#importBtnEmpty")) $("#importBtnEmpty").onclick=()=>$("#excelInput")?.click();
     if($("#excelInput")) $("#excelInput").onchange=e=>{const file=e.target.files?.[0];if(file)importExcel(file);e.target.value=""};
     if($("#demoInfoBtn")) $("#demoInfoBtn").onclick=demoInfo;
-    if($("#addAssetBtn")) $("#addAssetBtn").onclick=openAddAsset;
+    if($("#addAssetBtn")) $("#addAssetBtn").onclick=()=>openAddAsset();
     if($("#exportCsvBtn")) $("#exportCsvBtn").onclick=exportInventory;
     if($("#backupBtn")) $("#backupBtn").onclick=downloadBackup;
     if($("#exportMovementsBtn")) $("#exportMovementsBtn").onclick=exportMovements;

@@ -11,31 +11,31 @@
   <title>Inventario Praxis</title>
   <link rel="icon" type="image/jpeg" href="favicon-praxis.jpg?v=2" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=20260930-2208" />
+  <link rel="stylesheet" href="styles.css?v=20260930-2234" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
-    <div class="auth-card praxis-login-card">
-      <div class="login-header">
-        <img src="praxis-logo-transparent.png?v=3" alt="Colegio Praxis" class="login-logo" />
+    <div class="praxis-login-card">
+      <div class="praxis-login-header">
+        <img src="praxis-logo-transparent.png?v=4" alt="Colegio Praxis" class="praxis-login-logo" />
         <h1>INICIAR SESIÓN</h1>
       </div>
 
-      <div class="login-body">
+      <div class="praxis-login-body">
         <form id="loginForm" class="praxis-login-form">
-          <label class="login-field">
-            <span>Usuario:</span>
+          <div class="praxis-login-field">
+            <label for="loginEmail">Usuario:</label>
             <input id="loginEmail" type="text" autocomplete="username" required />
-          </label>
+          </div>
 
-          <label class="login-field">
-            <span>Contraseña:</span>
+          <div class="praxis-login-field">
+            <label for="loginPassword">Contraseña:</label>
             <input id="loginPassword" type="password" autocomplete="current-password" required />
-          </label>
+          </div>
 
-          <div class="login-bottom-row">
+          <div class="praxis-login-bottom">
             <div id="authMessage" class="auth-message"></div>
-            <button class="login-submit" type="submit">Iniciar sesión</button>
+            <button class="praxis-login-button" type="submit">Iniciar sesión</button>
           </div>
         </form>
       </div>

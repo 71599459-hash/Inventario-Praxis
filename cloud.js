@@ -37,32 +37,6 @@ const PraxisCloud = (() => {
     return data.session;
   }
 
-  async function signUp(payload) {
-    const c=init(); if(!c) throw new Error("Supabase aún no está configurado.");
-    const email=normalizeInstitutionalEmail(payload?.email);
-    const password=String(payload?.password||"");
-    const nombre=String(payload?.nombre||"").trim();
-    const dni=String(payload?.dni||"").replace(/\D/g,"");
-    const cargo=String(payload?.cargo||"").trim();
-    const sede=String(payload?.sede||"").trim();
-    const area=String(payload?.area||"").trim();
-
-    if(!email.endsWith("@praxis.edu.pe")) throw new Error("Utiliza un correo institucional @praxis.edu.pe.");
-    if(nombre.length<5) throw new Error("Ingresa nombres y apellidos completos.");
-    if(dni.length!==8) throw new Error("El DNI debe tener 8 dígitos.");
-    if(!cargo) throw new Error("Ingresa el cargo.");
-    if(!sede) throw new Error("Selecciona la sede.");
-    if(!area) throw new Error("Ingresa el área.");
-    if(password.length<8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
-
-    const {data,error}=await c.auth.signUp({
-      email,password,
-      options:{data:{nombre,dni,cargo,sede,area}}
-    });
-    if(error) throw error;
-    return data;
-  }
-
   async function bootstrapAdmin() {
     const c=init(); if(!c) return false;
     const {data,error}=await c.rpc("bootstrap_first_admin");
@@ -169,5 +143,5 @@ const PraxisCloud = (() => {
   const getProfile = () => profile;
   const getVersion = () => version;
 
-  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,signUp,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
+  return {configured,init,getSession,normalizeInstitutionalEmail,signIn,bootstrapAdmin,signOut,loadProfile,loadState,saveState,listUsers,setUserRole,setUserActive,audit,subscribeState,unsubscribe,role,canEdit,isAdmin,getProfile,getVersion};
 })();

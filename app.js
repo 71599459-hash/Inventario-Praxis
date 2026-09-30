@@ -100,7 +100,7 @@
     if ($("#sidebarProfileName")) $("#sidebarProfileName").textContent = displayName;
     if ($("#sidebarProfileRole")) $("#sidebarProfileRole").textContent = displayRole;
     $$(".edit-only").forEach(el=>el.classList.toggle("hidden",cloudMode && !canEdit()));
-    $(".admin-only").forEach(el=>el.classList.toggle("hidden",!canManageUsers()));
+    $$(".admin-only").forEach(el=>el.classList.toggle("hidden",!canManageUsers()));
     $$(".cloud-only").forEach(el=>el.classList.toggle("hidden",!cloudMode));
   }
 

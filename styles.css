@@ -79,7 +79,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .register-grid input,.register-grid select{width:100%;margin-top:5px;border:1px solid #cbd8e5;border-radius:9px;padding:11px;background:#fff}
 @media(max-width:620px){.register-grid{grid-template-columns:1fr}.register-grid .full{grid-column:auto}}
 
-/* Login Praxis — réplica de la pantalla institucional de referencia */
+/* Login Praxis — diseño institucional según referencia */
 .auth-gate{
   min-height:100vh;
   width:100%;
@@ -91,9 +91,9 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 }
 
 .auth-card.praxis-login-card{
-  width:396px;
+  width:416px;
   max-width:calc(100vw - 28px);
-  background:#f5f5f5;
+  background:#f7f7f7;
   border-radius:4px;
   overflow:hidden;
   box-shadow:none;
@@ -103,44 +103,44 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 }
 
 .login-header{
-  height:124px;
+  height:129px;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  background:#f2f2f2;
+  background:#f7f7f7;
   border-bottom:1px solid #d5d5d5;
 }
 
 .login-logo{
-  width:166px !important;
-  height:70px !important;
+  width:184px !important;
+  height:72px !important;
   max-width:none !important;
   object-fit:contain;
   border-radius:0 !important;
-  margin:0 0 1px 0 !important;
+  margin:0 0 2px 0 !important;
 }
 
 .login-header h1{
   margin:0;
-  color:#0b0b0b;
+  color:#080808;
   font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
-  font-size:27px;
+  font-size:28px;
   line-height:1;
   font-weight:500;
   letter-spacing:-1px;
 }
 
 .login-body{
-  min-height:155px;
-  padding:17px 15px 15px;
+  min-height:164px;
+  padding:18px 16px 16px;
   background:#f7f7f7;
 }
 
 .praxis-login-form{
   display:grid;
   grid-template-columns:1fr 1fr;
-  column-gap:23px;
+  column-gap:24px;
   row-gap:0;
   margin:0;
 }
@@ -157,17 +157,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .login-field > span{
   display:block;
-  margin:0 0 4px 0;
+  margin:0 0 5px 0;
 }
 
 .login-field input{
   display:block;
   width:100%;
-  height:37px;
+  height:38px;
   margin:0;
   padding:6px 11px;
   background:#fff;
-  border:1px solid #c7cfd6;
+  border:1px solid #c5ced6;
   border-radius:3px;
   color:#111;
   font-family:Arial,Helvetica,sans-serif;
@@ -185,7 +185,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .login-bottom-row{
   grid-column:1 / -1;
   min-height:53px;
-  margin-top:14px;
+  margin-top:15px;
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
@@ -193,18 +193,18 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 }
 
 .login-submit{
-  flex:0 0 114px;
-  width:114px;
-  height:36px;
+  flex:0 0 120px;
+  width:120px;
+  height:38px;
   margin:0;
   padding:0 10px;
-  border:1px solid #0753a6;
+  border:1px solid #0053a8;
   border-radius:3px;
   background:#075fbd;
   color:#fff;
   font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
   font-size:16px;
-  line-height:34px;
+  line-height:36px;
   font-weight:400;
   text-align:center;
   cursor:pointer;
@@ -213,32 +213,38 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .login-submit:hover{background:#0755aa}
 .login-submit:active{transform:translateY(1px)}
-.login-submit:disabled{opacity:.65;cursor:not-allowed}
+.login-submit:disabled{opacity:.72;cursor:wait}
 
 .praxis-login-card .auth-message{
   display:none;
-  flex:0 0 203px;
-  width:203px;
+  flex:0 0 214px;
+  width:214px;
   min-height:0;
   margin:0;
   padding:0;
   border-radius:3px;
   font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
   font-size:13px;
-  line-height:1.28;
+  line-height:1.42;
   text-align:left;
 }
 
 .praxis-login-card .auth-message.show{
   display:block;
-  min-height:51px;
+  min-height:53px;
   padding:9px 10px;
 }
 
 .praxis-login-card .auth-message.error{
-  background:#f9d9dc;
-  color:#b64c59;
-  border:1px solid #efb4bb;
+  background:#f8d7da;
+  color:#a9444f;
+  border:1px solid #efb1b8;
+}
+
+.praxis-login-card .auth-message.success{
+  background:#d7ece2;
+  color:#176642;
+  border:1px solid #acd6c4;
 }
 
 .praxis-login-card .auth-message.info{
@@ -249,32 +255,15 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 @media(max-width:520px){
   .auth-gate{padding:14px}
-  .auth-card.praxis-login-card{width:min(396px,100%)}
-  .login-header{height:120px}
-  .login-logo{width:158px !important;height:67px !important}
-  .login-header h1{font-size:25px}
+  .auth-card.praxis-login-card{width:min(416px,100%)}
+  .login-header{height:124px}
+  .login-logo{width:174px !important;height:69px !important}
+  .login-header h1{font-size:26px}
   .login-body{padding:16px 14px}
   .praxis-login-form{grid-template-columns:1fr;row-gap:12px}
   .login-bottom-row{grid-column:1;min-height:44px;margin-top:0}
   .praxis-login-card .auth-message{flex:1;width:auto}
-}
-
-/* El login institucional no muestra avisos ni cajas de error. */
-.praxis-login-card .auth-message,
-.praxis-login-card .auth-message.show,
-.praxis-login-card .auth-message.error,
-.praxis-login-card .auth-message.info{
-  display:none !important;
-  width:0 !important;
-  height:0 !important;
-  min-height:0 !important;
-  margin:0 !important;
-  padding:0 !important;
-  border:0 !important;
-  overflow:hidden !important;
-}
-.login-bottom-row{
-  justify-content:flex-end;
+  .login-submit{flex-basis:118px;width:118px}
 }
 
 .panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

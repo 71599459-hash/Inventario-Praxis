@@ -118,7 +118,7 @@ const PraxisCloud = (() => {
 
   async function listUsers() {
     const c=init(); if(!c) return [];
-    const {data,error}=await c.from("profiles").select("id,email,nombre,role,activo,last_login_at,created_at,updated_at").order("nombre");
+    const {data,error}=await c.from("profiles").select("id,email,nombre,dni,cargo,sede,area,role,activo,last_login_at,created_at,updated_at").order("nombre");
     if(error) throw error;
     return data||[];
   }

@@ -633,24 +633,33 @@
     wireTables();
   }
 
+  function cargoOverrideFor(p) {
+    const key=cargoPersonKey(p);
+    return (state?.cargoOverrides && state.cargoOverrides[key]) || {};
+  }
+
   function openEditPersonCargo(p) {
     if(!ensureEditable()) return;
-    const settings=state.cargoSettings||{};
+    state.cargoOverrides=state.cargoOverrides||{};
+    const key=cargoPersonKey(p);
+    const saved=state.cargoOverrides[key]||{};
     const sites=[...p.sites], areas=[...p.areas];
-    const defaultSite=sites.length===1?sites[0]:"";
-    const defaultArea=areas.length===1?areas[0]:"";
-    showModal("Editar datos del cargo","Los cambios del colaborador se aplican a los equipos que actualmente tiene a su cargo; no se duplica ningún Código TIC.",`
+    const defaultSite=saved.sede ?? (sites.length===1?sites[0]:"");
+    const defaultArea=saved.area ?? (areas.length===1?areas[0]:"");
+
+    showModal("Editar datos del cargo","Estos cambios son SOLO para la ficha de cargo impresa. No modifican el nombre, DNI, sede, área ni responsable del colaborador dentro del inventario.",`
+      <div class="alert info"><b>Solo impresión:</b> lo que cambies aquí se usará únicamente al generar el cargo de este colaborador.</div>
       <div id="formAlert"></div>
       <div class="form-grid">
-        <div class="form-field full"><label>Nombres y apellidos del usuario *</label><input id="pcName" value="${esc(p.name||"")}"></div>
-        <div class="form-field"><label>DNI</label><input id="pcDni" maxlength="8" value="${esc(p.dni||"")}"></div>
+        <div class="form-field full"><label>Nombres y apellidos del usuario *</label><input id="pcName" value="${esc(saved.personName ?? p.name ?? "")}"></div>
+        <div class="form-field"><label>DNI</label><input id="pcDni" maxlength="8" value="${esc(saved.dni ?? p.dni ?? "")}"></div>
         <div class="form-field"><label>Sede</label><input id="pcSite" value="${esc(defaultSite)}" placeholder="${sites.length>1?"Varias sedes":""}"></div>
         <div class="form-field"><label>Área</label><input id="pcArea" value="${esc(defaultArea)}" placeholder="${areas.length>1?"Varias áreas":""}"></div>
-        <div class="form-field full"><label>Técnico / Responsable de Inf. Tec.</label><input id="pcTech" value="${esc(settings.technicianName||"CARDENAS CURISINCHE, ROBERTO ALEJANDRO")}"></div>
-        <div class="form-field full"><label>Jefe de TIC</label><input id="pcChief" value="${esc(settings.chiefName||TIC_HEAD_NAME)}"></div>
+        <div class="form-field full"><label>Técnico / Responsable de Inf. Tec.</label><input id="pcTech" value="${esc(saved.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO")}"></div>
+        <div class="form-field full"><label>Jefe de TIC</label><input id="pcChief" value="${esc(saved.chiefName ?? TIC_HEAD_NAME)}"></div>
       </div>
       <div class="modal-actions">
-        <button id="savePersonCargo" class="btn btn-primary">Guardar datos</button>
+        <button id="savePersonCargo" class="btn btn-primary">Guardar solo para el cargo</button>
       </div>
     `);
 
@@ -662,22 +671,24 @@
       const tech=$("#pcTech").value.trim();
       const chief=$("#pcChief").value.trim();
       const alert=$("#formAlert");
+
       if(!name){alert.className="alert error";alert.textContent="El nombre del usuario es obligatorio.";return}
       if(dni && !/^\d{8}$/.test(dni)){alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return}
       if(!tech || !chief){alert.className="alert error";alert.textContent="Completa los nombres del técnico y del Jefe de TIC.";return}
 
-      p.items.forEach(r=>{
-        r.history=r.history||[];
-        r.history.unshift({type:"WEB",source:"Edición de colaborador",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Datos anteriores del responsable antes de editar el cargo"});
-        r.responsable=name;
-        r.dni=dni;
-        if(sede) r.sede=norm(sede);
-        if(area) r.area=area;
-        r.locationType=norm(r.area).includes("ALMAC")?"ALMACEN":r.responsable?"ASIGNADO":"SEDE";
-      });
-      state.cargoSettings={...(state.cargoSettings||{}),technicianName:tech,chiefName:chief};
-      await persist("EDITAR_COLABORADOR");
-      closeModal();renderAll();toast("Datos del cargo actualizados.","success");
+      state.cargoOverrides[key]={
+        personName:name,
+        dni,
+        sede,
+        area,
+        technicianName:tech,
+        chiefName:chief,
+        updatedAt:new Date().toISOString()
+      };
+
+      await persist("EDITAR_DATOS_CARGO");
+      closeModal();
+      toast("Datos guardados solo para la impresión del cargo.","success");
     };
   }
 
@@ -782,6 +793,14 @@
 
     state.cargoDocuments=state.cargoDocuments||[];
     const key=cargoPersonKey(p);
+    const cargoOverride=cargoOverrideFor(p);
+    const cargoPersonName=(cargoOverride.personName ?? p.name ?? "").trim();
+    const cargoDni=(cargoOverride.dni ?? p.dni ?? "").trim();
+    const cargoSede=(cargoOverride.sede ?? [...p.sites].join(", ")).trim();
+    const cargoArea=(cargoOverride.area ?? [...p.areas].join(", ")).trim();
+    const cargoTechnician=(cargoOverride.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO").trim();
+    const cargoChief=(cargoOverride.chiefName ?? TIC_HEAD_NAME).trim();
+
     const snap=cargoSnapshot(p.items);
     const fingerprint=cargoFingerprint(snap);
     const currentDate=today();
@@ -797,10 +816,10 @@
         id:crypto.randomUUID(),
         code:nextCargoCode(),
         personKey:key,
-        personName:p.name,
-        dni:p.dni||"",
-        sede:[...p.sites].join(", "),
-        area:[...p.areas].join(", "),
+        personName:cargoPersonName,
+        dni:cargoDni,
+        sede:cargoSede,
+        area:cargoArea,
         situacion:"INTERNO",
         initialDate:currentDate,
         finalDate:"",
@@ -814,6 +833,12 @@
       };
       state.cargoDocuments.push(doc);
       await persist("IMPRIMIR_CARGO");
+    } else {
+      // Si hoy se reimprime el mismo cargo, usa los datos exclusivos de impresión actuales.
+      doc.personName=cargoPersonName;
+      doc.dni=cargoDni;
+      doc.sede=cargoSede;
+      doc.area=cargoArea;
     }
 
     // La plantilla oficial tiene 25 filas de hardware. Si existen más componentes,
@@ -848,8 +873,8 @@
       }
     }
 
-    const technician=state?.cargoSettings?.technicianName || "CARDENAS CURISINCHE, ROBERTO ALEJANDRO";
-    const chief=state?.cargoSettings?.chiefName || TIC_HEAD_NAME;
+    const technician=cargoTechnician;
+    const chief=cargoChief;
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
 
     const software=[
@@ -1302,6 +1327,7 @@
         ALTA_EQUIPO:"Alta de equipo",
         EDITAR_FICHA:"Edición de ficha",
         EDITAR_COLABORADOR:"Edición de datos de cargo",
+        EDITAR_DATOS_CARGO:"Edición exclusiva de ficha de cargo",
         MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
         RESOLVER_CONFLICTO:"Resolución de conflicto",
         RESTAURAR_BACKUP:"Restauración de copia",

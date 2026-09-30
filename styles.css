@@ -79,7 +79,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .register-grid input,.register-grid select{width:100%;margin-top:5px;border:1px solid #cbd8e5;border-radius:9px;padding:11px;background:#fff}
 @media(max-width:620px){.register-grid{grid-template-columns:1fr}.register-grid .full{grid-column:auto}}
 
-/* Login Praxis — réplica final de la referencia institucional */
+/* Login Praxis — ajuste exacto según captura de referencia */
 .auth-gate{
   min-height:100vh;
   width:100%;
@@ -92,88 +92,81 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .auth-card.praxis-login-card{
   width:420px;
-  max-width:calc(100vw - 28px);
-  background:#f4f4f4;
+  max-width:calc(100vw - 30px);
+  background:#f3f3f3;
   border-radius:4px;
   overflow:hidden;
-  box-shadow:none;
   border:0;
+  box-shadow:none;
   padding:0;
-  text-align:left;
 }
 
 .login-header{
-  height:129px;
+  background:#f3f3f3;
+  border-bottom:1px solid #cfcfcf;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  background:#f4f4f4;
-  border-bottom:1px solid #d3d3d3;
+  height:128px;
+  padding-top:8px;
 }
 
 .login-logo{
-  width:178px !important;
-  height:72px !important;
-  max-width:none !important;
+  display:block;
+  width:150px !important;
+  height:auto !important;
+  max-height:72px;
+  margin:0 0 8px 0 !important;
+  background:transparent !important;
   object-fit:contain;
   border-radius:0 !important;
-  margin:0 0 2px 0 !important;
+  mix-blend-mode:multiply;
 }
 
 .login-header h1{
   margin:0;
-  color:#090909;
-  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
+  color:#111;
+  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,sans-serif;
   font-size:28px;
-  line-height:1;
   font-weight:500;
-  letter-spacing:-1px;
+  letter-spacing:-0.5px;
+  line-height:1;
 }
 
 .login-body{
-  min-height:162px;
-  padding:18px 19px 15px;
-  background:#f4f4f4;
+  background:#f3f3f3;
+  padding:20px 18px 16px;
 }
 
 .praxis-login-form{
   display:grid;
-  grid-template-columns:180px 180px;
-  column-gap:24px;
-  row-gap:0;
-  justify-content:center;
-  margin:0;
+  grid-template-columns:1fr 1fr;
+  gap:18px 24px;
 }
 
 .login-field{
-  display:block;
-  margin:0;
+  display:flex;
+  flex-direction:column;
   color:#111;
-  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
+  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,sans-serif;
   font-size:17px;
-  line-height:1.15;
   font-weight:400;
 }
 
 .login-field > span{
-  display:block;
-  margin:0 0 5px 0;
+  margin-bottom:6px;
 }
 
 .login-field input{
-  display:block;
-  width:180px;
-  height:39px;
-  margin:0;
-  padding:6px 11px;
-  background:#fff;
-  border:1px solid #c7cfd6;
+  height:38px;
+  padding:6px 10px;
+  border:1px solid #bcc8d4;
   border-radius:3px;
+  background:#fff;
   color:#111;
-  font-family:Arial,Helvetica,sans-serif;
+  font-family:Arial,sans-serif;
   font-size:16px;
-  font-weight:400;
   outline:none;
   box-shadow:none;
 }
@@ -185,56 +178,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
 .login-bottom-row{
   grid-column:1 / -1;
-  width:384px;
-  min-height:53px;
-  margin-top:15px;
   display:flex;
-  align-items:flex-start;
   justify-content:space-between;
+  align-items:flex-start;
+  margin-top:4px;
   gap:18px;
 }
 
-.login-submit{
-  flex:0 0 120px;
-  width:120px;
-  height:38px;
-  margin:0;
-  padding:0 10px;
-  border:1px solid #0053a8;
-  border-radius:3px;
-  background:#005fbd;
-  color:#fff;
-  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
-  font-size:16px;
-  line-height:36px;
-  font-weight:400;
-  text-align:center;
-  cursor:pointer;
-  box-shadow:none;
-}
-
-.login-submit:hover{background:#0056aa}
-.login-submit:active{transform:translateY(1px)}
-.login-submit:disabled{opacity:.72;cursor:wait}
-
 .praxis-login-card .auth-message{
   display:none;
-  flex:0 0 214px;
   width:214px;
-  min-height:0;
-  margin:0;
-  padding:0;
+  min-height:53px;
+  padding:9px 10px;
   border-radius:3px;
-  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,Helvetica,sans-serif;
+  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,sans-serif;
   font-size:13px;
   line-height:1.45;
+  box-sizing:border-box;
   text-align:left;
 }
 
 .praxis-login-card .auth-message.show{
   display:block;
-  min-height:53px;
-  padding:9px 10px;
 }
 
 .praxis-login-card .auth-message.error{
@@ -255,22 +220,47 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   border:1px solid #bfd2e6;
 }
 
-@media(max-width:520px){
-  .auth-gate{padding:14px}
-  .auth-card.praxis-login-card{width:min(420px,100%)}
-  .login-header{height:124px}
-  .login-logo{width:170px !important;height:68px !important}
-  .login-header h1{font-size:26px}
-  .login-body{padding:16px 14px}
+.login-submit{
+  width:120px;
+  height:38px;
+  border:1px solid #0053a8;
+  border-radius:3px;
+  background:#005fbd;
+  color:#fff;
+  font-family:"Arial Narrow","Liberation Sans Narrow",Arial,sans-serif;
+  font-size:16px;
+  font-weight:400;
+  cursor:pointer;
+  box-shadow:none;
+}
+
+.login-submit:hover{
+  background:#0056aa;
+}
+
+.login-submit:disabled{
+  opacity:.72;
+  cursor:wait;
+}
+
+@media (max-width:520px){
+  .auth-card.praxis-login-card{
+    width:100%;
+    max-width:420px;
+  }
+
   .praxis-login-form{
     grid-template-columns:1fr;
-    row-gap:12px;
-    justify-content:stretch;
   }
-  .login-field input{width:100%}
-  .login-bottom-row{grid-column:1;width:100%;min-height:44px;margin-top:0}
-  .praxis-login-card .auth-message{flex:1;width:auto}
-  .login-submit{flex-basis:118px;width:118px}
+
+  .login-bottom-row{
+    grid-column:1;
+    flex-direction:column;
+  }
+
+  .praxis-login-card .auth-message{
+    width:100%;
+  }
 }
 
 .panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

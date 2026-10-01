@@ -392,3 +392,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   .selected-assets-head .btn{width:100%}
   .selected-assets-table{max-height:240px}
 }
+
+
+/* Búsqueda profesional de colaboradores */
+.people-search-box{min-width:310px}
+.people-search-status{margin-top:5px;text-align:right;color:#60758a;font-size:9px}
+.people-search-status b{color:#174e82}
+.person-card-search{display:flex;flex-direction:column;min-height:180px}
+.person-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.person-card-top h4{margin-bottom:3px}
+.person-dni{font-size:9px;color:#657b90}
+.person-equipment-count{min-width:42px;text-align:center;font-size:26px;line-height:1;font-weight:900;color:#1467c8}
+.person-equipment-preview{margin-top:9px;padding:7px 8px;border-radius:7px;background:#f4f8fc;color:#49657d;font-size:9px;line-height:1.4}
+.person-view-btn{margin-top:auto;width:100%;border:0;border-radius:8px;background:#edf5ff;color:#135fae;padding:8px 10px;font-size:10px;font-weight:850;cursor:pointer}
+.person-view-btn:hover{background:#1478ed;color:#fff}
+.people-no-results{grid-column:1/-1;padding:32px 18px;border:1px dashed #c8d8e7;border-radius:12px;background:#fafcff;text-align:center;color:#526b82}
+.people-no-results b{display:block;font-size:13px;color:#244866}
+.people-no-results span{display:block;margin-top:5px;font-size:10px}
+.person-usage-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin-bottom:12px}
+.person-usage-summary>div{padding:9px 10px;border:1px solid #dce8f3;border-radius:9px;background:#f8fbff}
+.person-usage-summary b{display:block;font-size:20px;color:#1467c8}
+.person-usage-summary span{display:block;margin-top:2px;color:#506c84;font-size:9px;font-weight:750}
+@media(max-width:850px){
+  .people-search-box{width:100%;min-width:0}
+  .people-search-status{text-align:left}
+}

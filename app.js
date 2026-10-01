@@ -314,7 +314,7 @@
         <h4>${esc(p.name)}</h4><div class="card-number">${p.items.length}</div>
         <div class="card-meta">equipos / registros a cargo<br>DNI: ${esc(p.dni||"—")}<br>${esc([...p.sites].join(", "))}</div>
       </article>`).join("") || `<div class="muted">No se encontraron colaboradores.</div>`;
-    $$$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
+    $$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
   }
 
   function renderMovements() {
@@ -1766,17 +1766,87 @@ function collaborators() {
 
 function renderPeople() {
   const search=$("#peopleSearch");
-  const q=norm(search?.value||"");
-  const ps=collaborators().filter(p=>!q||norm([p.name,p.dni,...p.sites,...p.areas].join(" ")).includes(q));
-  $("#peopleCards").innerHTML=ps.map(p=>`
-    <article class="person-card" data-person="${esc(p.key)}">
-      <h4>${esc(p.name)}</h4><div class="card-number">${p.items.length}</div>
-      <div class="card-meta">${p.items.length===1?"equipo / registro a cargo":"equipos / registros a cargo"}<br>DNI: ${esc(p.dni||"—")}<br>${esc([...p.sites].join(", ")||"Sin sede registrada")}</div>
-      ${p.items.length===0?'<div class="person-empty-tag">Sin equipos asignados</div>':""}
-    </article>`).join("") || `<div class="muted">No se encontraron colaboradores.</div>`;
-  $$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
-}
+  const raw=String(search?.value||"").trim();
+  const q=norm(raw);
+  const digits=raw.replace(/\D/g,"");
+  const tokens=q.split(/\s+/).filter(Boolean);
+  const all=collaborators();
 
+  const scored=all.map(p=>{
+    const name=norm(p.name||"");
+    const dni=String(p.dni||"").replace(/\D/g,"");
+    const siteArea=norm([...p.sites,...p.areas].join(" "));
+    let score=0;
+    let match=!raw;
+
+    if(raw){
+      if(digits){
+        if(dni===digits){score=1000;match=true}
+        else if(dni.startsWith(digits)){score=850;match=true}
+        else if(dni.includes(digits)){score=700;match=true}
+      }
+
+      if(q){
+        if(name===q){score=Math.max(score,950);match=true}
+        else if(name.startsWith(q)){score=Math.max(score,800);match=true}
+        else if(name.includes(q)){score=Math.max(score,650);match=true}
+        else if(tokens.length && tokens.every(t=>name.includes(t))){
+          score=Math.max(score,600);match=true;
+        }else if(siteArea.includes(q)){
+          score=Math.max(score,200);match=true;
+        }
+      }
+    }
+
+    return {p,score,match};
+  }).filter(x=>x.match)
+    .sort((a,b)=>b.score-a.score || a.p.name.localeCompare(b.p.name,"es"));
+
+  const ps=scored.map(x=>x.p);
+  const status=$("#peopleSearchStatus");
+  if(status){
+    status.innerHTML=raw
+      ? `<b>${ps.length}</b> colaborador${ps.length===1?"":"es"} encontrado${ps.length===1?"":"s"} para <b>${esc(raw)}</b>`
+      : `<b>${all.length}</b> colaboradores registrados`;
+  }
+
+  $("#peopleCards").innerHTML=ps.map(p=>{
+    const grouped=groupCount(p.items,"equipo");
+    const top=topEntries(grouped,3).map(([k,v])=>`${k} (${v})`).join(" · ");
+    return `
+      <article class="person-card person-card-search" data-person="${esc(p.key)}" tabindex="0" role="button" aria-label="Ver equipos de ${esc(p.name)}">
+        <div class="person-card-top">
+          <div>
+            <h4>${esc(p.name)}</h4>
+            <div class="person-dni">DNI: <b>${esc(p.dni||"—")}</b></div>
+          </div>
+          <div class="person-equipment-count">${p.items.length}</div>
+        </div>
+        <div class="card-meta">${p.items.length===1?"equipo / registro a cargo":"equipos / registros a cargo"}<br>${esc([...p.sites].join(", ")||"Sin sede registrada")}</div>
+        ${top?`<div class="person-equipment-preview"><b>Utiliza:</b> ${esc(top)}</div>`:"<div class=\"person-empty-tag\">Sin equipos asignados</div>"}
+        <button class="person-view-btn" type="button" data-person-open="${esc(p.key)}">Ver equipos que utiliza</button>
+      </article>`;
+  }).join("") || `
+    <div class="people-no-results">
+      <b>No se encontró ningún colaborador.</b>
+      <span>Revisa el nombre o DNI. Los colaboradores creados manualmente también aparecen en esta búsqueda.</span>
+    </div>`;
+
+  const openByKey=(key)=>openPerson(key);
+  $$("[data-person]").forEach(c=>{
+    c.onclick=e=>{
+      if(e.target.closest("[data-person-open]")) return;
+      openByKey(c.dataset.person);
+    };
+    c.onkeydown=e=>{
+      if(e.key==="Enter"||e.key===" "){e.preventDefault();openByKey(c.dataset.person)}
+    };
+  });
+  $$("[data-person-open]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    openByKey(b.dataset.personOpen);
+  });
+}
 function openCollaboratorAssignment(prefillKey="") {
   if(!ensureEditable()) return;
 
@@ -2209,25 +2279,36 @@ function openCollaboratorAssignment(prefillKey="") {
 }
 function openPerson(key) {
   const p=collaborators().find(x=>x.key===key);if(!p)return;
-  const items=p.items.slice().sort((a,b)=>(a.codigo||a.id).localeCompare(b.codigo||b.id));
-  showModal(p.name,`${items.length} equipos / registros a cargo`,`
+  const items=p.items.slice().sort((a,b)=>(a.equipo||"").localeCompare(b.equipo||"","es") || (a.codigo||a.id||"").localeCompare(b.codigo||b.id||"","es"));
+  const grouped=topEntries(groupCount(items,"equipo"),10);
+  const summary=grouped.length
+    ? `<div class="person-usage-summary">${grouped.map(([name,count])=>`<div><b>${count}</b><span>${esc(name)}</span></div>`).join("")}</div>`
+    : `<div class="asset-picker-empty">Este colaborador aún no tiene equipos asignados.</div>`;
+
+  showModal(p.name,`${items.length} equipos / registros actualmente a cargo`,`
     <div class="detail-grid">
       <div class="detail-field"><span>DNI</span><b>${esc(p.dni||"—")}</b></div>
       <div class="detail-field"><span>Sede(s)</span><b>${esc([...p.sites].join(", ")||"—")}</b></div>
       <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
     </div>
+
+    <h4 class="section-title">Actualmente utiliza</h4>
+    ${summary}
+
     <div class="modal-actions">
       ${canEdit()?'<button id="assignPersonAssets" class="btn btn-primary">Asignar / transferir equipos</button>':""}
       <button id="editPersonCargo" class="btn btn-soft">Editar datos</button>
       <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
       <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
     </div>
-    <h4 class="section-title">Equipos a cargo</h4>${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Este colaborador aún no tiene equipos asignados.</div>'}
+
+    <h4 class="section-title">Detalle de equipos a cargo</h4>
+    ${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Sin equipos asignados.</div>'}
   `);
   if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);
   $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
   $("#printCargo").onclick=()=>printCargo(p);
-  $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.name;page=1;renderInventory()};
+  $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.dni||p.name;page=1;renderInventory()};
   wireTables();
 }
 

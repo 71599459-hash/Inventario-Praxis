@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261001-2118" />
+  <link rel="stylesheet" href="styles.css?v=20261001-2215" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -207,7 +207,10 @@
                 </div>
                 <div class="people-actions">
                   <button id="manageCollaboratorBtn" class="btn btn-primary edit-only">+ Nuevo colaborador / asignar equipos</button>
-                  <div class="search-control compact"><span>⌕</span><input id="peopleSearch" placeholder="Nombre, DNI, sede o área"></div>
+                  <div class="people-search-box">
+                    <div class="search-control compact"><span>⌕</span><input id="peopleSearch" autocomplete="off" placeholder="Buscar por nombre o DNI"></div>
+                    <div id="peopleSearchStatus" class="people-search-status"></div>
+                  </div>
                 </div>
               </div>
               <div class="collaborator-help">
@@ -342,6 +345,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20260930-2045"></script>
-  <script src="app.js?v=20261001-2148"></script>
+  <script src="app.js?v=20261001-2215"></script>
 </body>
 </html>

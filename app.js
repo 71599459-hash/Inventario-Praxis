@@ -2236,7 +2236,27 @@ function openPerson(key) {
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     if($("#mobileMenu")) $("#mobileMenu").onclick=()=>$("#sidebar")?.classList.toggle("open");
     if($("#modalClose")) $("#modalClose").onclick=closeModal;
-    // El modal solo se cierra con el botón X. Los clics fuera no lo cierran.
+    // Política global de modales: nunca cerrar al hacer clic fuera.
+    // Aplica a fichas, altas, edición, movimientos, colaboradores, usuarios,
+    // revisión y cualquier ventana que utilice #modal.
+    if($("#modal")){
+      $("#modal").onclick=(e)=>{
+        if(e.target === $("#modal")){
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+    }
+
+    // Evita cierres accidentales con Escape. El cierre manual se realiza
+    // únicamente con la X; los botones Guardar/Confirmar pueden cerrar
+    // después de completar correctamente su operación.
+    document.addEventListener("keydown",(e)=>{
+      if(e.key==="Escape" && $("#modal")?.classList.contains("open")){
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
     if($("#dismissPrivacy")) $("#dismissPrivacy").onclick=()=>$("#privacyBanner")?.remove();
     if($("#importBtnTop")) $("#importBtnTop").onclick=()=>$("#excelInput")?.click();
     if($("#importBtnEmpty")) $("#importBtnEmpty").onclick=()=>$("#excelInput")?.click();

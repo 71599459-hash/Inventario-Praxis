@@ -425,3 +425,13 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .cargo-editor-table td,.cargo-software-table td{padding:5px}.cargo-editor-table th,.cargo-software-table th{font-size:9px}
 .cargo-software-table{max-height:300px;overflow:auto}.cargo-software-table table{min-width:650px}
 .cargo-editor-actions{position:sticky;bottom:-17px;margin:14px -17px -17px;padding:12px 17px;background:rgba(255,255,255,.97);border-top:1px solid #e3eaf1;backdrop-filter:blur(8px)}
+
+/* Control de firma y recepción de cargos */
+.cargo-status-box{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cargo-status-box>div{padding:9px 10px;border:1px solid #dce8f3;border-radius:9px;background:#f8fbff}
+.cargo-status-box span{display:block;color:#6c8195;font-size:8px;text-transform:uppercase;font-weight:800}
+.cargo-status-box b{display:block;margin-top:3px;font-size:11px;color:#183f62}
+.cargo-status-box .cargo-received{color:#08754a}.cargo-status-box .cargo-pending{color:#966400}
+.cargo-user-cell{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:155px}
+.cargo-user-cell>b{color:#1467c8}.cargo-user-cell .btn{margin-top:2px}
+@media(max-width:850px){.cargo-status-box{grid-template-columns:1fr}}

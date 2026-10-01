@@ -975,13 +975,14 @@
     const cargoDni=(cargoOverride.dni ?? p.dni ?? "").trim();
     const cargoSede=(cargoOverride.sede ?? [...p.sites].join(", ")).trim();
     const cargoArea=(cargoOverride.area ?? [...p.areas].join(", ")).trim();
-    const cargoTechnician=(cargoOverride.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO").trim();
-    const cargoChief=(cargoOverride.chiefName ?? TIC_HEAD_NAME).trim();
-    const cargoSituation=(cargoOverride.situacion ?? "INTERNO").trim();
-    const cargoInitialDate=(cargoOverride.initialDate ?? today()).trim();
-    const cargoFinalDate=(cargoOverride.finalDate ?? "").trim();
-    const cargoInitialObservation=(cargoOverride.initialObservation ?? "").trim();
-    const cargoFinalObservation=(cargoOverride.finalObservation ?? "").trim();
+    const editableDoc=currentCargoDocForPerson(p);
+    const cargoTechnician=(cargoOverride.technicianName ?? editableDoc?.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO").trim();
+    const cargoChief=(cargoOverride.chiefName ?? editableDoc?.chiefName ?? TIC_HEAD_NAME).trim();
+    const cargoSituation=(cargoOverride.situacion ?? editableDoc?.situacion ?? "INTERNO").trim();
+    const cargoInitialDate=(cargoOverride.initialDate ?? editableDoc?.initialDate ?? today()).trim();
+    const cargoFinalDate=(cargoOverride.finalDate ?? editableDoc?.finalDate ?? "").trim();
+    const cargoInitialObservation=(cargoOverride.initialObservation ?? editableDoc?.initialObservation ?? "").trim();
+    const cargoFinalObservation=(cargoOverride.finalObservation ?? editableDoc?.finalObservation ?? "").trim();
 
     const baseSnap=cargoSnapshot(p.items);
     const fingerprint=cargoFingerprint(baseSnap);
@@ -1391,6 +1392,8 @@
       if (!next.inventory.length) throw new Error("No se encontraron registros de inventario.");
       next.fileName=file.name;
       next.cargoDocuments=state?.cargoDocuments||[];
+      next.cargoOverrides=state?.cargoOverrides||{};
+      next.collaboratorDirectory=state?.collaboratorDirectory||[];
       state=next;await persist("IMPORTAR_EXCEL");page=1;renderAll();setView("dashboard");
       toast(`Inventario importado: ${state.inventory.length} registros maestros.`,"success");
     }catch(err){console.error(err);toast(err.message||"No se pudo importar el Excel.","error")}
@@ -1554,6 +1557,8 @@
       const admins=allUsers.filter(u=>u.role==="ADMIN_TIC"&&u.activo).length;
       const editors=allUsers.filter(u=>u.role==="EDITOR"&&u.activo).length;
       const consult=allUsers.filter(u=>u.role==="CONSULTA"&&u.activo).length;
+      const printedDocs=(state?.cargoDocuments||[]).filter(d=>d.printedAt);
+      const signedDocs=printedDocs.filter(d=>d.receivedSigned);
 
       if($("#authorizedSummary")) $("#authorizedSummary").innerHTML=[
         [allUsers.length,"Cuentas registradas"],
@@ -1561,7 +1566,9 @@
         [pendingCount,"Pendientes / bloqueados"],
         [admins,"Cuenta Master"],
         [editors,"Editores"],
-        [consult,"Solo lectura"]
+        [consult,"Solo lectura"],
+        [printedDocs.length,"Cargos impresos"],
+        [signedDocs.length,"Firmados / recibidos"]
       ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
 
       const users=allUsers.filter(u=>{
@@ -1581,6 +1588,16 @@
         const actionText=u.activo?"Desautorizar":"Autorizar";
         const actionClass=u.activo?"btn-danger":"btn-success";
 
+        const userDni=String(u.dni||"").replace(/\D/g,"");
+        const userCargoDocs=printedDocs.filter(d=>userDni && String(d.dni||"").replace(/\D/g,"")===userDni);
+        const latestCargo=[...userCargoDocs].reverse()[0]||null;
+        const cargoControl=latestCargo
+          ? `<div class="cargo-user-cell"><b>${esc(latestCargo.code)}</b><div class="muted">${userCargoDocs.length} cargo(s) impreso(s)</div>
+              <span class="badge ${latestCargo.receivedSigned?"ok":"warn"}">${latestCargo.receivedSigned?"FIRMADO / RECIBIDO":"PENDIENTE FIRMA"}</span>
+              <button class="btn ${latestCargo.receivedSigned?"btn-warning":"btn-success"} btn-small" data-received-cargo="${esc(latestCargo.id)}" data-next-received="${latestCargo.receivedSigned?"false":"true"}">${latestCargo.receivedSigned?"Quitar recibido":"Marcar recibido"}</button>
+            </div>`
+          : '<span class="muted">Sin cargo impreso</span>';
+
         const roleControl=isMaster
           ? '<select class="role-select" disabled><option selected>MASTER TIC</option></select>'
           : `<select class="role-select" data-role-user="${esc(u.id)}">
@@ -1595,12 +1612,13 @@
           <td><b>${esc(u.cargo||"—")}</b><div class="muted">${esc([u.sede,u.area].filter(Boolean).join(" / ")||"—")}</div></td>
           <td>${roleControl}</td>
           <td>${statusBadge}</td>
+          <td>${cargoControl}</td>
           <td>${esc(fmtDateTime(u.last_login_at))}</td>
           <td><button class="btn ${actionClass} btn-small" data-active-user="${esc(u.id)}" data-next-active="${u.activo?"false":"true"}" ${isMaster?"disabled":""}>${actionText}</button></td>
         </tr>`;
       }).join("");
 
-      $("#usersTable").innerHTML=`<div class="table-wrap"><table class="authorized-table"><thead><tr><th>Personal</th><th>Cargo / ubicación</th><th>Rol</th><th>Acceso</th><th>Último acceso</th><th>Acción</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No se encontró personal con esos filtros.</td></tr>'}</tbody></table></div>`;
+      $("#usersTable").innerHTML=`<div class="table-wrap"><table class="authorized-table"><thead><tr><th>Personal</th><th>Cargo / ubicación</th><th>Rol</th><th>Acceso</th><th>Cargos / recepción</th><th>Último acceso</th><th>Acción</th></tr></thead><tbody>${rows||'<tr><td colspan="7">No se encontró personal con esos filtros.</td></tr>'}</tbody></table></div>`;
 
       $$("[data-role-user]").forEach(sel=>{
         sel.onchange=async()=>{
@@ -1619,7 +1637,22 @@
         };
       });
 
-      $$("[data-active-user]").forEach(btn=>{
+      $("[data-received-cargo]").forEach(btn=>{
+        btn.onclick=async()=>{
+          const received=btn.dataset.nextReceived==="true";
+          if(!confirm(received?"¿Confirmar que el usuario firmó el cargo y recibió sus equipos?":"¿Quitar la confirmación de recepción?")) return;
+          try{
+            await setCargoReceived(btn.dataset.receivedCargo,received);
+            await renderUsers();
+            await renderAudit();
+          }catch(err){
+            console.error(err);
+            toast((err&&err.message)||"No se pudo actualizar la recepción del cargo.","error");
+          }
+        };
+      });
+
+      $("[data-active-user]").forEach(btn=>{
         btn.onclick=async()=>{
           const active=btn.dataset.nextActive==="true";
           const label=active?"autorizar":"desautorizar";
@@ -1651,7 +1684,9 @@
         ALTA_EQUIPO:"Alta de equipo",
         EDITAR_FICHA:"Edición de ficha",
         EDITAR_COLABORADOR:"Edición de datos de cargo",
-        EDITAR_DATOS_CARGO:"Edición exclusiva de ficha de cargo",
+        EDITAR_DATOS_CARGO:"Edición completa de ficha de cargo",
+        IMPRIMIR_CARGO:"Impresión / reimpresión de cargo",
+        CONFIRMAR_RECEPCION_CARGO:"Confirmación de firma y recepción",
         MOVIMIENTO_EQUIPO:"Movimiento / transferencia",
         RESOLVER_CONFLICTO:"Resolución de conflicto",
         RESTAURAR_BACKUP:"Restauración de copia",
@@ -2470,13 +2505,22 @@ function openCollaboratorAssignment(prefillKey="") {
     }
   };
 }
-function openPerson(key) {
+function openPerson(key){
   const p=collaborators().find(x=>x.key===key);if(!p)return;
   const items=p.items.slice().sort((a,b)=>(a.equipo||"").localeCompare(b.equipo||"","es") || (a.codigo||a.id||"").localeCompare(b.codigo||b.id||"","es"));
   const grouped=topEntries(groupCount(items,"equipo"),10);
+  const latestCargo=latestPrintedCargoForPerson(p);
   const summary=grouped.length
     ? `<div class="person-usage-summary">${grouped.map(([name,count])=>`<div><b>${count}</b><span>${esc(name)}</span></div>`).join("")}</div>`
     : `<div class="asset-picker-empty">Este colaborador aún no tiene equipos asignados.</div>`;
+
+  const cargoStatus=latestCargo
+    ? `<div class="cargo-status-box">
+        <div><span>Cargo</span><b>${esc(latestCargo.code)}</b></div>
+        <div><span>Impreso</span><b>${esc(fmtDateTime(latestCargo.printedAt))}</b></div>
+        <div><span>Recepción</span><b class="${latestCargo.receivedSigned?"cargo-received":"cargo-pending"}">${latestCargo.receivedSigned?"FIRMADO / RECIBIDO":"PENDIENTE DE FIRMA"}</b></div>
+      </div>`
+    : `<div class="alert info">Este colaborador todavía no tiene un cargo impreso.</div>`;
 
   showModal(p.name,`${items.length} equipos / registros actualmente a cargo`,`
     <div class="detail-grid">
@@ -2484,22 +2528,29 @@ function openPerson(key) {
       <div class="detail-field"><span>Sede(s)</span><b>${esc([...p.sites].join(", ")||"—")}</b></div>
       <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
     </div>
-
     <h4 class="section-title">Actualmente utiliza</h4>
     ${summary}
-
+    <h4 class="section-title">Control del cargo</h4>
+    ${cargoStatus}
     <div class="modal-actions">
       ${canEdit()?'<button id="assignPersonAssets" class="btn btn-primary">Asignar / transferir equipos</button>':""}
-      <button id="editPersonCargo" class="btn btn-soft">Editar datos</button>
+      <button id="editPersonCargo" class="btn btn-soft">Editar todo el cargo</button>
       <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
+      ${latestCargo&&canEdit()?`<button id="toggleCargoReceived" class="btn ${latestCargo.receivedSigned?"btn-warning":"btn-success"}">${latestCargo.receivedSigned?"Quitar recibido":"Marcar firmado y recibido"}</button>`:""}
     </div>
-
     <h4 class="section-title">Detalle de equipos a cargo</h4>
     ${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Sin equipos asignados.</div>'}
   `);
   if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);
   $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
   $("#printCargo").onclick=()=>printCargo(p);
+  if($("#toggleCargoReceived")) $("#toggleCargoReceived").onclick=async()=>{
+    const next=!latestCargo.receivedSigned;
+    if(!confirm(next?"¿Confirmar que el usuario ya firmó el cargo y recibió los equipos?":"¿Quitar la confirmación de firma y recepción?")) return;
+    await setCargoReceived(latestCargo.id,next);
+    closeModal();
+    openPerson(key);
+  };
   wireTables();
 }
 

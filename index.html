@@ -9,9 +9,27 @@
   <meta name="theme-color" content="#0c2f50" />
   <meta name="description" content="Sistema de Inventario TIC del Colegio Praxis" />
   <title>Inventario Praxis</title>
-  <link rel="icon" type="image/png" sizes="64x64" href="favicon-praxis-p.png?v=20261001-2" />
-  <link rel="shortcut icon" type="image/png" href="favicon-praxis-p.png?v=20261001-2" />
-  <link rel="manifest" href="manifest.webmanifest?v=20261001-2" />
+  <link id="appFavicon" rel="icon" type="image/png" sizes="64x64" href="praxis-tab-icon-20261001.png?v=4" />
+  <link rel="shortcut icon" type="image/png" href="praxis-tab-icon-20261001.png?v=4" />
+  <link rel="apple-touch-icon" href="praxis-tab-icon-20261001.png?v=4" />
+  <link rel="manifest" href="manifest.webmanifest?v=20261001-4" />
+  <script>
+    (() => {
+      const href = "praxis-tab-icon-20261001.png?v=4";
+      document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]').forEach((link) => link.remove());
+      const icon = document.createElement("link");
+      icon.rel = "icon";
+      icon.type = "image/png";
+      icon.sizes = "64x64";
+      icon.href = href;
+      document.head.appendChild(icon);
+      const shortcut = document.createElement("link");
+      shortcut.rel = "shortcut icon";
+      shortcut.type = "image/png";
+      shortcut.href = href;
+      document.head.appendChild(shortcut);
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css?v=20261001-0830" />
 </head>
 <body>

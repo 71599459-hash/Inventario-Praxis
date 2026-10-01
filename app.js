@@ -977,15 +977,22 @@
     const cargoArea=(cargoOverride.area ?? [...p.areas].join(", ")).trim();
     const cargoTechnician=(cargoOverride.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO").trim();
     const cargoChief=(cargoOverride.chiefName ?? TIC_HEAD_NAME).trim();
+    const cargoSituation=(cargoOverride.situacion ?? "INTERNO").trim();
+    const cargoInitialDate=(cargoOverride.initialDate ?? today()).trim();
+    const cargoFinalDate=(cargoOverride.finalDate ?? "").trim();
+    const cargoInitialObservation=(cargoOverride.initialObservation ?? "").trim();
+    const cargoFinalObservation=(cargoOverride.finalObservation ?? "").trim();
 
-    const snap=cargoSnapshot(p.items);
-    const fingerprint=cargoFingerprint(snap);
+    const baseSnap=cargoSnapshot(p.items);
+    const fingerprint=cargoFingerprint(baseSnap);
+    const overrideItems=Array.isArray(cargoOverride.items)&&cargoOverride.items.length?cargoOverride.items:null;
+    const overrideMap=new Map((overrideItems||[]).map(x=>[x.id||x.codigo,x]));
+    const snap=baseSnap.map(r=>({...r,...(overrideMap.get(r.id||r.codigo)||{})}));
     const currentDate=today();
 
     let doc=[...state.cargoDocuments].reverse().find(d=>
       d.personKey===key &&
-      d.initialDate===currentDate &&
-      cargoFingerprint(d.items||[])===fingerprint
+      (d.itemFingerprint===fingerprint || cargoFingerprint(d.items||[])===fingerprint)
     );
 
     if(!doc){
@@ -997,11 +1004,14 @@
         dni:cargoDni,
         sede:cargoSede,
         area:cargoArea,
-        situacion:"INTERNO",
-        initialDate:currentDate,
-        finalDate:"",
-        initialObservation:"",
-        finalObservation:"",
+        situacion:cargoSituation,
+        initialDate:cargoInitialDate,
+        finalDate:cargoFinalDate,
+        initialObservation:cargoInitialObservation,
+        finalObservation:cargoFinalObservation,
+        technicianName:cargoTechnician,
+        chiefName:cargoChief,
+        software:Array.isArray(cargoOverride.software)&&cargoOverride.software.length?cargoOverride.software:cargoSoftwareDefaults(),
         itemFingerprint:fingerprint,
         items:snap,
         createdBy:currentProfile?.id||"",
@@ -1009,14 +1019,28 @@
         createdAt:new Date().toISOString()
       };
       state.cargoDocuments.push(doc);
-      await persist("IMPRIMIR_CARGO");
     } else {
-      // Si hoy se reimprime el mismo cargo, usa los datos exclusivos de impresión actuales.
       doc.personName=cargoPersonName;
       doc.dni=cargoDni;
       doc.sede=cargoSede;
       doc.area=cargoArea;
+      doc.situacion=cargoSituation;
+      doc.initialDate=cargoInitialDate;
+      doc.finalDate=cargoFinalDate;
+      doc.initialObservation=cargoInitialObservation;
+      doc.finalObservation=cargoFinalObservation;
+      doc.technicianName=cargoTechnician;
+      doc.chiefName=cargoChief;
+      doc.software=Array.isArray(cargoOverride.software)&&cargoOverride.software.length?cargoOverride.software:(doc.software||cargoSoftwareDefaults());
+      doc.items=snap;
+      doc.itemFingerprint=fingerprint;
+      doc.updatedAt=new Date().toISOString();
     }
+
+    doc.printedAt=doc.printedAt||new Date().toISOString();
+    doc.lastPrintedAt=new Date().toISOString();
+    doc.printCount=(Number(doc.printCount)||0)+1;
+    await persist("IMPRIMIR_CARGO");
 
     // La plantilla oficial tiene 25 filas de hardware. Si existen más componentes,
     // se mantienen todos y se reduce proporcionalmente la altura para conservar una sola hoja.
@@ -1054,13 +1078,18 @@
     const chief=cargoChief;
     const logo=document.querySelector(".brand img")?.src||document.querySelector("[data-brand-logo]")?.src||"";
 
-    const software=[
-      ["1","Windows","10","22H2","6","Edge","","","11","","",""],
-      ["2","Ms Office Professional Plus","2021","","7","Chrome","","","12","","",""],
-      ["3","Winrar","2021","","8","Firefox","","","13","","",""],
-      ["4","VLC","","","9","Adobe Acrobat","2021","","14","","",""],
-      ["5","Aimp3","","","10","Anydesk","","","15","","",""]
-    ].map(r=>`<tr>${r.map((v,i)=>`<td class="${[0,4,8].includes(i)?"num":""}">${esc(v)}</td>`).join("")}</tr>`).join("");
+    const softwareItems=Array.isArray(doc.software)&&doc.software.length?doc.software:cargoSoftwareDefaults();
+    const softwareRows=[];
+    for(let row=0;row<5;row++){
+      const cells=[];
+      for(let block=0;block<3;block++){
+        const idx=row+(block*5);
+        const s=softwareItems[idx]||{name:"",version:"",details:""};
+        cells.push(String(idx+1),s.name||"",s.version||"",s.details||"");
+      }
+      softwareRows.push(`<tr>${cells.map((v,i)=>`<td class="${[0,4,8].includes(i)?"num":""}">${esc(v)}</td>`).join("")}</tr>`);
+    }
+    const software=softwareRows.join("");
 
     const reviewInitial=`
       <div class="review-box review-left">
@@ -1078,8 +1107,8 @@
     const reviewFinal=`
       <div class="review-box review-right">
         <div class="review-title">REVISIÓN FINAL</div>
-        <div class="review-date right-date"><b>FECHA</b><span></span></div>
-        <div class="review-note-free"></div>
+        <div class="review-date right-date"><b>FECHA</b><span>${esc(doc.finalDate?cargoDate(doc.finalDate):"")}</span></div>
+        <div class="review-note-free">${esc(doc.finalObservation||"")}</div>
         <div class="review-label">OBSERVACIONES</div>
         <div class="review-write"></div>
         <div class="review-sign-labels"><b>FIRMA DEL USUARIO</b><b>FIRMA DEL TÉCNICO</b></div>

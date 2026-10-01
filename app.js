@@ -884,12 +884,13 @@
 
   function nextCargoCode(){
     const year=new Date().getFullYear();
-    const existing=(state?.cargoDocuments||[])
+    const used=new Set((state?.cargoDocuments||[])
       .map(d=>String(d.code||"").match(new RegExp("^FTEC-"+year+"-(\\d+)$","i")))
       .filter(Boolean)
       .map(m=>Number(m[1]))
-      .filter(Number.isFinite);
-    const seq=Math.max(CARGO_BASE_SEQUENCE,...existing)+1;
+      .filter(Number.isFinite));
+    let seq=CARGO_BASE_SEQUENCE+1;
+    while(used.has(seq)) seq++;
     return `FTEC-${year}-${String(seq).padStart(3,"0")}`;
   }
 

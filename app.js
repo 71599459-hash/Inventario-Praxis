@@ -314,7 +314,7 @@
         <h4>${esc(p.name)}</h4><div class="card-number">${p.items.length}</div>
         <div class="card-meta">equipos / registros a cargo<br>DNI: ${esc(p.dni||"—")}<br>${esc([...p.sites].join(", "))}</div>
       </article>`).join("") || `<div class="muted">No se encontraron colaboradores.</div>`;
-    $$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
+    $$$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
   }
 
   function renderMovements() {
@@ -1774,7 +1774,7 @@ function renderPeople() {
       <div class="card-meta">${p.items.length===1?"equipo / registro a cargo":"equipos / registros a cargo"}<br>DNI: ${esc(p.dni||"—")}<br>${esc([...p.sites].join(", ")||"Sin sede registrada")}</div>
       ${p.items.length===0?'<div class="person-empty-tag">Sin equipos asignados</div>':""}
     </article>`).join("") || `<div class="muted">No se encontraron colaboradores.</div>`;
-  $("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
+  $$("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
 }
 
 function openCollaboratorAssignment(prefillKey="") {

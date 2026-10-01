@@ -2236,7 +2236,7 @@ function openPerson(key) {
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
     if($("#mobileMenu")) $("#mobileMenu").onclick=()=>$("#sidebar")?.classList.toggle("open");
     if($("#modalClose")) $("#modalClose").onclick=closeModal;
-    if($("#modal")) $("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
+    // El modal solo se cierra con el botón X. Los clics fuera no lo cierran.
     if($("#dismissPrivacy")) $("#dismissPrivacy").onclick=()=>$("#privacyBanner")?.remove();
     if($("#importBtnTop")) $("#importBtnTop").onclick=()=>$("#excelInput")?.click();
     if($("#importBtnEmpty")) $("#importBtnEmpty").onclick=()=>$("#excelInput")?.click();

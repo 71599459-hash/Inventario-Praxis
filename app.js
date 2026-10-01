@@ -153,7 +153,7 @@
       inventory:["Inventario maestro","Búsqueda, edición y control del Código TIC"],
       general:["General / Administrativos","Equipos a cargo del personal administrativo"],
       sites:["Sedes","Inventario separado por cada sede"],
-      people:["Colaboradores","Equipos y componentes a cargo"],
+      people:["Colaboradores","Alta, asignación y transferencia de equipos por responsable"],
       warehouse:["Almacén TIC","Control de equipos almacenados"],
       networks:["Cámaras y redes","Infraestructura tecnológica y seguridad"],
       materials:["Materiales","Insumos, materiales y herramientas"],
@@ -1690,6 +1690,408 @@
     }
   }
 
+  /* COLLABORATOR_ASSIGNMENT_V2 */
+function collaboratorIdentity(name,dni) {
+  const cleanDni=String(dni||"").replace(/\D/g,"");
+  return cleanDni ? `DNI:${cleanDni}` : `NOMBRE:${norm(name)}`;
+}
+
+function upsertCollaboratorDirectory(person) {
+  state.collaboratorDirectory=state.collaboratorDirectory||[];
+  const name=String(person?.name||"").trim();
+  const dni=String(person?.dni||"").replace(/\D/g,"").slice(0,8);
+  if(!name) return null;
+  const idx=state.collaboratorDirectory.findIndex(c=>
+    (dni && String(c.dni||"").replace(/\D/g,"")===dni) ||
+    norm(c.name)===norm(name)
+  );
+  const base={
+    id:idx>=0 ? state.collaboratorDirectory[idx].id : crypto.randomUUID(),
+    name,
+    dni,
+    sede:String(person?.sede||"").trim().toUpperCase(),
+    area:String(person?.area||"").trim(),
+    updatedAt:new Date().toISOString()
+  };
+  if(idx>=0){
+    state.collaboratorDirectory[idx]={...state.collaboratorDirectory[idx],...base};
+    return state.collaboratorDirectory[idx];
+  }
+  base.createdAt=new Date().toISOString();
+  state.collaboratorDirectory.push(base);
+  return base;
+}
+
+function collaborators() {
+  const map = new Map();
+
+  const addPerson=(data,item=null)=>{
+    const name=String(data?.name||"").trim();
+    const dni=String(data?.dni||"").trim();
+    if(!name) return;
+
+    let key=collaboratorIdentity(name,dni);
+    let p=map.get(key);
+
+    if(!p){
+      p=[...map.values()].find(x=>
+        norm(x.name)===norm(name) &&
+        (!dni || !x.dni || String(x.dni).trim()===dni)
+      );
+    }
+
+    if(!p){
+      p={key,name,dni,items:[],sites:new Set(),areas:new Set(),manual:Boolean(data?.manual)};
+      map.set(key,p);
+    }else{
+      if(!p.dni && dni) p.dni=dni;
+      p.manual=p.manual||Boolean(data?.manual);
+    }
+
+    if(data?.sede) p.sites.add(data.sede);
+    if(data?.area) p.areas.add(data.area);
+    if(item) p.items.push(item);
+  };
+
+  (state?.collaboratorDirectory||[]).forEach(c=>addPerson({
+    name:c.name,dni:c.dni,sede:c.sede,area:c.area,manual:true
+  }));
+
+  activeInventory().filter(r=>r.responsable).forEach(r=>addPerson({
+    name:r.responsable,dni:r.dni,sede:r.sede,area:r.area
+  },r));
+
+  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,"es"));
+}
+
+function renderPeople() {
+  const search=$("#peopleSearch");
+  const q=norm(search?.value||"");
+  const ps=collaborators().filter(p=>!q||norm([p.name,p.dni,...p.sites,...p.areas].join(" ")).includes(q));
+  $("#peopleCards").innerHTML=ps.map(p=>`
+    <article class="person-card" data-person="${esc(p.key)}">
+      <h4>${esc(p.name)}</h4><div class="card-number">${p.items.length}</div>
+      <div class="card-meta">${p.items.length===1?"equipo / registro a cargo":"equipos / registros a cargo"}<br>DNI: ${esc(p.dni||"—")}<br>${esc([...p.sites].join(", ")||"Sin sede registrada")}</div>
+      ${p.items.length===0?'<div class="person-empty-tag">Sin equipos asignados</div>':""}
+    </article>`).join("") || `<div class="muted">No se encontraron colaboradores.</div>`;
+  $("[data-person]").forEach(c=>c.onclick=()=>openPerson(c.dataset.person));
+}
+
+function openCollaboratorAssignment(prefillKey="") {
+  if(!ensureEditable()) return;
+
+  const people=collaborators();
+  const warehouseCount=activeInventory().filter(r=>r.locationType==="ALMACEN").length;
+  const destinationOptions=people.map(p=>`<option value="${esc(p.key)}">${esc(p.name)}${p.dni?` · DNI ${esc(p.dni)}`:""}</option>`).join("");
+
+  showModal("Colaboradores · asignación de equipos","Registra un colaborador nuevo o transfiere varios equipos desde Almacén TIC u otro colaborador.",`
+    <div id="collabAssignAlert"></div>
+
+    <div class="assignment-summary">
+      <div><b>Asignación múltiple</b><span>Selecciona todos los componentes que quedarán a nombre del colaborador.</span></div>
+      <div class="assignment-summary-number"><b>${warehouseCount}</b><span>en almacén</span></div>
+      <div class="assignment-summary-number"><b id="caSelectedCount">0</b><span>seleccionados</span></div>
+    </div>
+
+    <div class="form-grid collaborator-form">
+      <div class="form-field full">
+        <label>Colaborador destino *</label>
+        <select id="caDestination">
+          <option value="__new__">+ Registrar nuevo colaborador</option>
+          ${destinationOptions}
+        </select>
+      </div>
+
+      <div class="form-field full"><label>Nombres y apellidos *</label><input id="caName" placeholder="Ej. PÉREZ GARCÍA, JUAN CARLOS"></div>
+      <div class="form-field"><label>DNI *</label><input id="caDni" maxlength="8" inputmode="numeric" placeholder="8 dígitos"></div>
+      <div class="form-field"><label>Sede *</label><input id="caSite" placeholder="Ej. CENTRO"></div>
+      <div class="form-field full"><label>Área / aula donde utilizará los equipos *</label><input id="caArea" placeholder="Ej. SECRETARÍA / AULA / COORDINACIÓN"></div>
+    </div>
+
+    <div class="assignment-divider">
+      <div><b>Equipos a asignar o transferir</b><span>Puedes escoger equipos del almacén o cambiar equipos actualmente asignados a otro colaborador.</span></div>
+    </div>
+
+    <div class="assignment-filters">
+      <div class="form-field">
+        <label>Origen de los equipos</label>
+        <select id="caSource">
+          <option value="ALMACEN">Almacén TIC</option>
+          <option value="COLABORADOR">Otro colaborador</option>
+          <option value="TODOS">Almacén + colaboradores</option>
+        </select>
+      </div>
+      <div class="form-field" id="caOriginWrap">
+        <label>Colaborador actual</label>
+        <select id="caOrigin"></select>
+      </div>
+      <div class="form-field assignment-search-field">
+        <label>Buscar componente</label>
+        <input id="caAssetSearch" placeholder="Código TIC, equipo, marca, serie...">
+      </div>
+    </div>
+
+    <div class="asset-picker-toolbar">
+      <div class="button-row">
+        <button id="caSelectVisible" class="btn btn-soft" type="button">Seleccionar visibles</button>
+        <button id="caClearSelection" class="btn btn-soft" type="button">Limpiar selección</button>
+      </div>
+      <span id="caVisibleCount" class="muted"></span>
+    </div>
+
+    <div id="caAssetPicker"></div>
+
+    <div class="form-field full assignment-note">
+      <label>Motivo / observación</label>
+      <textarea id="caObservation" placeholder="Ej. entrega de equipos, cambio de responsable, renovación de puesto...">Asignación de equipos al colaborador</textarea>
+    </div>
+
+    <div class="modal-actions assignment-actions">
+      <button id="saveCollaboratorAssignment" class="btn btn-primary">Guardar colaborador y asignación</button>
+    </div>
+  `);
+
+  const selected=new Set();
+  const destination=$("#caDestination");
+  const source=$("#caSource");
+  const origin=$("#caOrigin");
+  const originWrap=$("#caOriginWrap");
+  const search=$("#caAssetSearch");
+
+  const samePerson=(r,p)=>{
+    if(!p || !r?.responsable) return false;
+    const rdni=String(r.dni||"").replace(/\D/g,"");
+    const pdni=String(p.dni||"").replace(/\D/g,"");
+    return Boolean(rdni && pdni && rdni===pdni) || norm(r.responsable)===norm(p.name);
+  };
+
+  const getDestination=()=>destination.value==="__new__" ? null : people.find(p=>p.key===destination.value);
+
+  const syncOriginOptions=()=>{
+    const dest=getDestination();
+    const current=origin.value;
+    const available=people.filter(p=>p.items.length>0 && (!dest || p.key!==dest.key));
+    origin.innerHTML=available.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${p.items.length} equipo(s)</option>`).join("");
+    if(available.some(p=>p.key===current)) origin.value=current;
+    originWrap.classList.toggle("hidden",source.value!=="COLABORADOR");
+  };
+
+  const assetRows=()=>{
+    const q=norm(search.value||"");
+    const dest=getDestination();
+    const originPerson=people.find(p=>p.key===origin.value);
+
+    return activeInventory().filter(r=>{
+      if(dest && samePerson(r,dest)) return false;
+
+      let matchesSource=false;
+      if(source.value==="ALMACEN") matchesSource=r.locationType==="ALMACEN";
+      else if(source.value==="COLABORADOR") matchesSource=Boolean(originPerson && samePerson(r,originPerson));
+      else matchesSource=r.locationType==="ALMACEN" || Boolean(r.responsable);
+
+      if(!matchesSource) return false;
+      if(!q) return true;
+      return norm([r.codigo,r.id,r.equipo,r.descripcion,r.marca,r.modelo,r.serie,r.sede,r.area,r.responsable,r.estado].join(" ")).includes(q);
+    }).sort((a,b)=>{
+      const ta=`${a.equipo||""} ${a.codigo||a.id||""}`;
+      const tb=`${b.equipo||""} ${b.codigo||b.id||""}`;
+      return ta.localeCompare(tb,"es");
+    });
+  };
+
+  const updateSelectedCount=()=>{
+    const count=$("#caSelectedCount");
+    if(count) count.textContent=String(selected.size);
+  };
+
+  const renderAssetPicker=()=>{
+    syncOriginOptions();
+    const rows=assetRows();
+    $("#caVisibleCount").textContent=`${rows.length} equipo(s) disponibles con este filtro`;
+
+    $("#caAssetPicker").innerHTML=rows.length ? `
+      <div class="table-wrap asset-picker-table">
+        <table>
+          <thead><tr><th class="check-col"></th><th>Código TIC</th><th>Equipo / componente</th><th>Marca / modelo</th><th>Serie</th><th>Ubicación actual</th><th>Responsable actual</th><th>Estado</th></tr></thead>
+          <tbody>${rows.map(r=>`
+            <tr class="${selected.has(r.id)?"asset-selected":""}">
+              <td class="check-col"><input type="checkbox" data-assign-asset="${esc(r.id)}" ${selected.has(r.id)?"checked":""}></td>
+              <td><span class="code">${esc(r.codigo||r.id)}</span></td>
+              <td><b>${esc(r.equipo||"Sin tipo")}</b><div class="muted">${esc(r.descripcion||"")}</div></td>
+              <td>${esc([r.marca,r.modelo].filter(Boolean).join(" / ")||"—")}</td>
+              <td>${esc(r.serie||"—")}</td>
+              <td>${esc([r.sede,r.area].filter(Boolean).join(" / ")||"—")}</td>
+              <td>${esc(r.responsable||"ALMACÉN TIC")}</td>
+              <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span></td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : `<div class="asset-picker-empty">No hay equipos disponibles para el origen y filtro seleccionado.</div>`;
+
+    $("[data-assign-asset]").forEach(box=>{
+      box.onchange=()=>{
+        if(box.checked) selected.add(box.dataset.assignAsset);
+        else selected.delete(box.dataset.assignAsset);
+        box.closest("tr")?.classList.toggle("asset-selected",box.checked);
+        updateSelectedCount();
+      };
+    });
+    updateSelectedCount();
+  };
+
+  const syncDestinationFields=()=>{
+    const p=getDestination();
+    const name=$("#caName"), dni=$("#caDni"), site=$("#caSite"), area=$("#caArea");
+
+    if(p){
+      name.value=p.name||"";
+      dni.value=p.dni||"";
+      name.readOnly=true;
+      dni.readOnly=true;
+      site.value=[...p.sites][0]||"";
+      area.value=[...p.areas][0]||"";
+    }else{
+      name.readOnly=false;
+      dni.readOnly=false;
+      name.value="";
+      dni.value="";
+      site.value="";
+      area.value="";
+    }
+    syncOriginOptions();
+    renderAssetPicker();
+  };
+
+  destination.onchange=syncDestinationFields;
+  source.onchange=()=>{syncOriginOptions();renderAssetPicker()};
+  origin.onchange=renderAssetPicker;
+  search.oninput=renderAssetPicker;
+
+  $("#caSelectVisible").onclick=()=>{
+    assetRows().forEach(r=>selected.add(r.id));
+    renderAssetPicker();
+  };
+  $("#caClearSelection").onclick=()=>{
+    selected.clear();
+    renderAssetPicker();
+  };
+
+  if(prefillKey && people.some(p=>p.key===prefillKey)){
+    destination.value=prefillKey;
+  }
+  syncDestinationFields();
+
+  $("#saveCollaboratorAssignment").onclick=async()=>{
+    const alert=$("#collabAssignAlert");
+    const isNew=destination.value==="__new__";
+    const name=$("#caName").value.trim();
+    const dni=$("#caDni").value.replace(/\D/g,"").slice(0,8);
+    const sede=$("#caSite").value.trim().toUpperCase();
+    const area=$("#caArea").value.trim();
+    const observation=$("#caObservation").value.trim()||"Asignación de equipos al colaborador";
+    const records=[...selected].map(id=>activeInventory().find(r=>r.id===id)).filter(Boolean);
+
+    alert.className="";
+    alert.textContent="";
+
+    if(!name){
+      alert.className="alert error";alert.textContent="Ingresa los nombres y apellidos del colaborador.";return;
+    }
+    if(isNew && !/^\d{8}$/.test(dni)){
+      alert.className="alert error";alert.textContent="Para un colaborador nuevo, el DNI debe tener 8 dígitos.";return;
+    }
+    if(dni && !/^\d{8}$/.test(dni)){
+      alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return;
+    }
+    if(!sede || !area){
+      alert.className="alert error";alert.textContent="Completa la sede y el área donde utilizará los equipos.";return;
+    }
+
+    upsertCollaboratorDirectory({name,dni,sede,area});
+    state.webMovements=state.webMovements||[];
+
+    records.forEach(r=>{
+      const oldSite=r.sede||"";
+      const oldArea=r.area||"";
+      const oldResp=r.responsable||"";
+      const oldDni=r.dni||"";
+      const from=[oldSite,oldArea,oldResp].filter(Boolean).join(" / ") || "SIN UBICACIÓN";
+
+      if(oldResp && norm(oldResp)!==norm(name)){
+        upsertCollaboratorDirectory({name:oldResp,dni:oldDni,sede:oldSite,area:oldArea});
+      }
+
+      r.history=r.history||[];
+      r.history.unshift({
+        type:"WEB",
+        source:"Asignación de colaborador",
+        fecha:today(),
+        sede:oldSite,
+        area:oldArea,
+        responsable:oldResp,
+        estado:r.estado,
+        observaciones:`Ubicación anterior. ${observation}`
+      });
+
+      r.sede=sede;
+      r.area=area;
+      r.responsable=name;
+      r.dni=dni;
+      r.locationType="ASIGNADO";
+      r.needsReview=false;
+      r.conflictLocations=[];
+      r.conflictRecords=[];
+
+      state.webMovements.unshift({
+        id:crypto.randomUUID(),
+        fecha:today(),
+        source:oldResp ? "Transferencia de colaborador" : "Asignación desde almacén",
+        codigo:r.codigo,
+        equipo:r.equipo,
+        from,
+        to:[sede,area,name].filter(Boolean).join(" / "),
+        responsable:name,
+        motivo:observation,
+        observaciones:observation
+      });
+    });
+
+    await persist(records.length ? "ASIGNAR_EQUIPOS_COLABORADOR" : "ALTA_COLABORADOR");
+    closeModal();
+    renderAll();
+
+    if(records.length){
+      toast(`${name}: ${records.length} equipo(s) asignado(s) correctamente.`,"success");
+    }else{
+      toast(`Colaborador ${name} registrado. Puedes asignarle equipos cuando lo necesites.`,"success");
+    }
+  };
+}
+
+function openPerson(key) {
+  const p=collaborators().find(x=>x.key===key);if(!p)return;
+  const items=p.items.slice().sort((a,b)=>(a.codigo||a.id).localeCompare(b.codigo||b.id));
+  showModal(p.name,`${items.length} equipos / registros a cargo`,`
+    <div class="detail-grid">
+      <div class="detail-field"><span>DNI</span><b>${esc(p.dni||"—")}</b></div>
+      <div class="detail-field"><span>Sede(s)</span><b>${esc([...p.sites].join(", ")||"—")}</b></div>
+      <div class="detail-field"><span>Área(s)</span><b>${esc([...p.areas].join(", ")||"—")}</b></div>
+    </div>
+    <div class="modal-actions">
+      ${canEdit()?'<button id="assignPersonAssets" class="btn btn-primary">Asignar / transferir equipos</button>':""}
+      <button id="editPersonCargo" class="btn btn-soft">Editar datos</button>
+      <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
+      <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
+    </div>
+    <h4 class="section-title">Equipos a cargo</h4>${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Este colaborador aún no tiene equipos asignados.</div>'}
+  `);
+  if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);
+  $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
+  $("#printCargo").onclick=()=>printCargo(p);
+  $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.name;page=1;renderInventory()};
+  wireTables();
+}
+
   function wireAppControls() {
     $$(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
     $$("[data-go]").forEach(b=>b.onclick=()=>setView(b.dataset.go));
@@ -1702,6 +2104,7 @@
     if($("#excelInput")) $("#excelInput").onchange=e=>{const file=e.target.files?.[0];if(file)importExcel(file);e.target.value=""};
     if($("#demoInfoBtn")) $("#demoInfoBtn").onclick=demoInfo;
     if($("#addAssetBtn")) $("#addAssetBtn").onclick=()=>openAddAsset();
+    if($("#manageCollaboratorBtn")) $("#manageCollaboratorBtn").onclick=()=>openCollaboratorAssignment();
     if($("#exportCsvBtn")) $("#exportCsvBtn").onclick=exportInventory;
     if($("#backupBtn")) $("#backupBtn").onclick=downloadBackup;
     if($("#exportMovementsBtn")) $("#exportMovementsBtn").onclick=exportMovements;

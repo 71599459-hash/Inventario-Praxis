@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261001-0830" />
+  <link rel="stylesheet" href="styles.css?v=20261001-1605" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -201,8 +201,17 @@
           <section class="view" data-view-panel="people">
             <article class="panel">
               <div class="panel-head panel-head-row">
-                <div><h3>Colaboradores y equipos a cargo</h3><p>La persona se registra una sola vez y se relaciona con sus equipos actuales.</p></div>
-                <div class="search-control compact"><span>⌕</span><input id="peopleSearch" placeholder="Nombre, DNI, sede o área"></div>
+                <div>
+                  <h3>Colaboradores y equipos a cargo</h3>
+                  <p>Registra colaboradores, asigna componentes del almacén y transfiere equipos entre responsables sin duplicar el Código TIC.</p>
+                </div>
+                <div class="people-actions">
+                  <button id="manageCollaboratorBtn" class="btn btn-primary edit-only">+ Nuevo colaborador / asignar equipos</button>
+                  <div class="search-control compact"><span>⌕</span><input id="peopleSearch" placeholder="Nombre, DNI, sede o área"></div>
+                </div>
+              </div>
+              <div class="collaborator-help">
+                <b>Gestión de responsables:</b> puedes seleccionar varios equipos del Almacén TIC o equipos que actualmente están a nombre de otro colaborador y transferirlos en una sola operación.
               </div>
               <div id="peopleCards" class="card-grid people-grid"></div>
             </article>
@@ -333,6 +342,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20260930-2045"></script>
-  <script src="app.js?v=20260930-2202"></script>
+  <script src="app.js?v=20261001-1605"></script>
 </body>
 </html>

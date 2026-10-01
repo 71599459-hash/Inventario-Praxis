@@ -417,3 +417,11 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   .people-search-box{width:100%;min-width:0}
   .people-search-status{text-align:left}
 }
+
+/* Editor completo de cargos */
+.readonly-code{background:#eef3f8 !important;color:#31516e !important;font-weight:900;letter-spacing:.4px}
+.cargo-editor-table{max-height:360px;overflow:auto}.cargo-editor-table table{min-width:1500px}
+.cargo-editor-table input,.cargo-software-table input{width:100%;min-width:86px;border:1px solid #cbd8e5;border-radius:6px;padding:6px;background:#fff;font-size:10px}
+.cargo-editor-table td,.cargo-software-table td{padding:5px}.cargo-editor-table th,.cargo-software-table th{font-size:9px}
+.cargo-software-table{max-height:300px;overflow:auto}.cargo-software-table table{min-width:650px}
+.cargo-editor-actions{position:sticky;bottom:-17px;margin:14px -17px -17px;padding:12px 17px;background:rgba(255,255,255,.97);border-top:1px solid #e3eaf1;backdrop-filter:blur(8px)}

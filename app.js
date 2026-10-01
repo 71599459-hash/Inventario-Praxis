@@ -656,62 +656,221 @@
     return (state?.cargoOverrides && state.cargoOverrides[key]) || {};
   }
 
-  function openEditPersonCargo(p) {
+  function cargoSoftwareDefaults(){
+    return [
+      {name:"Windows",version:"10",details:"22H2"},
+      {name:"Ms Office Professional Plus",version:"2021",details:""},
+      {name:"Winrar",version:"2021",details:""},
+      {name:"VLC",version:"",details:""},
+      {name:"Aimp3",version:"",details:""},
+      {name:"Edge",version:"",details:""},
+      {name:"Chrome",version:"",details:""},
+      {name:"Firefox",version:"",details:""},
+      {name:"Adobe Acrobat",version:"2021",details:""},
+      {name:"Anydesk",version:"",details:""},
+      {name:"",version:"",details:""},
+      {name:"",version:"",details:""},
+      {name:"",version:"",details:""},
+      {name:"",version:"",details:""},
+      {name:"",version:"",details:""}
+    ];
+  }
+  
+  function currentCargoDocForPerson(p){
+    state.cargoDocuments=state.cargoDocuments||[];
+    const key=cargoPersonKey(p);
+    const base=cargoSnapshot(p.items);
+    const fingerprint=cargoFingerprint(base);
+    return [...state.cargoDocuments].reverse().find(d=>
+      d.personKey===key &&
+      (d.itemFingerprint===fingerprint || cargoFingerprint(d.items||[])===fingerprint)
+    ) || null;
+  }
+  
+  function latestPrintedCargoForPerson(p){
+    const key=cargoPersonKey(p);
+    const dni=String(p?.dni||"").replace(/\D/g,"");
+    return [...(state?.cargoDocuments||[])].reverse().find(d=>{
+      if(!d.printedAt) return false;
+      const docDni=String(d.dni||"").replace(/\D/g,"");
+      return d.personKey===key || (dni && docDni===dni);
+    }) || null;
+  }
+  
+  async function setCargoReceived(docId,received=true){
     if(!ensureEditable()) return;
+    const doc=(state?.cargoDocuments||[]).find(d=>d.id===docId);
+    if(!doc){toast("No se encontró el cargo.","error");return}
+    doc.receivedSigned=Boolean(received);
+    doc.receivedAt=received?new Date().toISOString():"";
+    doc.receivedBy=currentProfile?.id||"";
+    doc.receivedByName=received?(currentProfile?.nombre||currentProfile?.email||""):"";
+    await persist("CONFIRMAR_RECEPCION_CARGO");
+    toast(received?"Cargo marcado como firmado y equipos recibidos.":"Se quitó la confirmación de recepción.","success");
+  }
+  
+  function openEditPersonCargo(p){
+    if(!ensureEditable()) return;
+  
     state.cargoOverrides=state.cargoOverrides||{};
+    state.cargoDocuments=state.cargoDocuments||[];
+  
     const key=cargoPersonKey(p);
     const saved=state.cargoOverrides[key]||{};
+    const existingDoc=currentCargoDocForPerson(p);
+    const baseItems=cargoSnapshot(p.items);
+    const fingerprint=cargoFingerprint(baseItems);
+    const docCode=existingDoc?.code || nextCargoCode();
+  
     const sites=[...p.sites], areas=[...p.areas];
-    const defaultSite=saved.sede ?? (sites.length===1?sites[0]:"");
-    const defaultArea=saved.area ?? (areas.length===1?areas[0]:"");
-
-    showModal("Editar datos del cargo","Estos cambios son SOLO para la ficha de cargo impresa. No modifican el nombre, DNI, sede, área ni responsable del colaborador dentro del inventario.",`
-      <div class="alert info"><b>Solo impresión:</b> lo que cambies aquí se usará únicamente al generar el cargo de este colaborador.</div>
+    const personName=saved.personName ?? existingDoc?.personName ?? p.name ?? "";
+    const dni=saved.dni ?? existingDoc?.dni ?? p.dni ?? "";
+    const sede=saved.sede ?? existingDoc?.sede ?? (sites.length===1?sites[0]:"");
+    const area=saved.area ?? existingDoc?.area ?? (areas.length===1?areas[0]:"");
+    const situacion=saved.situacion ?? existingDoc?.situacion ?? "INTERNO";
+    const technician=saved.technicianName ?? existingDoc?.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO";
+    const chief=saved.chiefName ?? existingDoc?.chiefName ?? TIC_HEAD_NAME;
+    const initialDate=saved.initialDate ?? existingDoc?.initialDate ?? today();
+    const finalDate=saved.finalDate ?? existingDoc?.finalDate ?? "";
+    const initialObservation=saved.initialObservation ?? existingDoc?.initialObservation ?? "";
+    const finalObservation=saved.finalObservation ?? existingDoc?.finalObservation ?? "";
+  
+    const savedItems=Array.isArray(saved.items)&&saved.items.length?saved.items:(existingDoc?.items||[]);
+    const savedById=new Map(savedItems.map(x=>[x.id||x.codigo,x]));
+    const items=baseItems.map(r=>({...r,...(savedById.get(r.id||r.codigo)||{})}));
+  
+    const softwareRaw=Array.isArray(saved.software)&&saved.software.length?saved.software:(existingDoc?.software||cargoSoftwareDefaults());
+    const software=[...softwareRaw];
+    while(software.length<15) software.push({name:"",version:"",details:""});
+  
+    showModal("Editar cargo técnico","Puedes editar todo el contenido de la ficha. El código FTEC es automático y no se puede modificar.",`
+      <div class="alert info"><b>Código automático:</b> este cargo usará <b>${esc(docCode)}</b>. El siguiente continuará correlativamente.</div>
       <div id="formAlert"></div>
-      <div class="form-grid">
-        <div class="form-field full"><label>Nombres y apellidos del usuario *</label><input id="pcName" value="${esc(saved.personName ?? p.name ?? "")}"></div>
-        <div class="form-field"><label>DNI</label><input id="pcDni" maxlength="8" value="${esc(saved.dni ?? p.dni ?? "")}"></div>
-        <div class="form-field"><label>Sede</label><input id="pcSite" value="${esc(defaultSite)}" placeholder="${sites.length>1?"Varias sedes":""}"></div>
-        <div class="form-field"><label>Área</label><input id="pcArea" value="${esc(defaultArea)}" placeholder="${areas.length>1?"Varias áreas":""}"></div>
-        <div class="form-field full"><label>Técnico / Responsable de Inf. Tec.</label><input id="pcTech" value="${esc(saved.technicianName ?? "CARDENAS CURISINCHE, ROBERTO ALEJANDRO")}"></div>
-        <div class="form-field full"><label>Jefe de TIC</label><input id="pcChief" value="${esc(saved.chiefName ?? TIC_HEAD_NAME)}"></div>
+  
+      <h4 class="section-title">Datos generales del cargo</h4>
+      <div class="form-grid cargo-editor-general">
+        <div class="form-field"><label>Código FTEC</label><input value="${esc(docCode)}" readonly class="readonly-code"></div>
+        <div class="form-field"><label>Situación</label><input id="pcSituation" value="${esc(situacion)}"></div>
+        <div class="form-field full"><label>Usuario / colaborador *</label><input id="pcName" value="${esc(personName)}"></div>
+        <div class="form-field"><label>DNI</label><input id="pcDni" maxlength="8" value="${esc(dni)}"></div>
+        <div class="form-field"><label>Sede</label><input id="pcSite" value="${esc(sede)}"></div>
+        <div class="form-field full"><label>Área</label><input id="pcArea" value="${esc(area)}"></div>
+        <div class="form-field"><label>Fecha revisión inicial</label><input id="pcInitialDate" type="date" value="${esc(initialDate)}"></div>
+        <div class="form-field"><label>Fecha revisión final</label><input id="pcFinalDate" type="date" value="${esc(finalDate)}"></div>
+        <div class="form-field full"><label>Observación revisión inicial</label><textarea id="pcInitialObs">${esc(initialObservation)}</textarea></div>
+        <div class="form-field full"><label>Observación revisión final</label><textarea id="pcFinalObs">${esc(finalObservation)}</textarea></div>
+        <div class="form-field full"><label>Técnico / Responsable de Inf. Tec.</label><input id="pcTech" value="${esc(technician)}"></div>
+        <div class="form-field full"><label>Jefe de TIC</label><input id="pcChief" value="${esc(chief)}"></div>
       </div>
-      <div class="modal-actions">
-        <button id="savePersonCargo" class="btn btn-primary">Guardar solo para el cargo</button>
+  
+      <h4 class="section-title">Hardware del cargo</h4>
+      <div class="table-wrap cargo-editor-table">
+        <table>
+          <thead><tr><th>#</th><th>Cant.</th><th>Equipo</th><th>Tipo</th><th>Marca</th><th>Modelo</th><th>Características</th><th>Código TIC</th><th>Serie</th><th>Estado</th><th>Observación</th></tr></thead>
+          <tbody>${items.map((r,i)=>`<tr data-cargo-row="${i}">
+            <td>${i+1}</td>
+            <td><input data-cargo-field="cantidad" value="${esc(r.cantidad||"1")}"></td>
+            <td><input data-cargo-field="equipo" value="${esc(r.equipo||"")}"></td>
+            <td><input data-cargo-field="bien" value="${esc(r.bien||cargoItemType(r))}"></td>
+            <td><input data-cargo-field="marca" value="${esc(r.marca||"")}"></td>
+            <td><input data-cargo-field="modelo" value="${esc(r.modelo||"")}"></td>
+            <td><input data-cargo-field="caracteristicas" value="${esc(r.caracteristicas||"")}"></td>
+            <td><input data-cargo-field="codigo" value="${esc(r.codigo||"")}"></td>
+            <td><input data-cargo-field="serie" value="${esc(r.serie||"")}"></td>
+            <td><input data-cargo-field="estado" value="${esc(r.estado||"")}"></td>
+            <td><input data-cargo-field="observaciones" value="${esc(r.observaciones||"")}"></td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </div>
+  
+      <h4 class="section-title">Software del cargo</h4>
+      <div class="table-wrap cargo-software-table">
+        <table>
+          <thead><tr><th>#</th><th>Nombre</th><th>Versión</th><th>Detalles</th></tr></thead>
+          <tbody>${software.slice(0,15).map((s,i)=>`<tr data-software-row="${i}">
+            <td>${i+1}</td>
+            <td><input data-software-field="name" value="${esc(s.name||"")}"></td>
+            <td><input data-software-field="version" value="${esc(s.version||"")}"></td>
+            <td><input data-software-field="details" value="${esc(s.details||"")}"></td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </div>
+  
+      <div class="modal-actions cargo-editor-actions">
+        <button id="savePersonCargo" class="btn btn-primary">Guardar cambios del cargo</button>
       </div>
     `);
-
+  
     $("#savePersonCargo").onclick=async()=>{
-      const name=$("#pcName").value.trim();
-      const dni=$("#pcDni").value.trim();
-      const sede=$("#pcSite").value.trim();
-      const area=$("#pcArea").value.trim();
-      const tech=$("#pcTech").value.trim();
-      const chief=$("#pcChief").value.trim();
       const alert=$("#formAlert");
-
+      const name=$("#pcName").value.trim();
+      const cargoDni=$("#pcDni").value.replace(/\D/g,"").slice(0,8);
+      const cargoSede=$("#pcSite").value.trim();
+      const cargoArea=$("#pcArea").value.trim();
+      const tech=$("#pcTech").value.trim();
+      const chiefName=$("#pcChief").value.trim();
+  
       if(!name){alert.className="alert error";alert.textContent="El nombre del usuario es obligatorio.";return}
-      if(dni && !/^\d{8}$/.test(dni)){alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return}
-      if(!tech || !chief){alert.className="alert error";alert.textContent="Completa los nombres del técnico y del Jefe de TIC.";return}
-
-      state.cargoOverrides[key]={
+      if(cargoDni && !/^\d{8}$/.test(cargoDni)){alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return}
+      if(!tech || !chiefName){alert.className="alert error";alert.textContent="Completa los nombres del técnico y del Jefe de TIC.";return}
+  
+      const editedItems=items.map((base,i)=>{
+        const row=document.querySelector(`[data-cargo-row="${i}"]`);
+        const get=f=>row?.querySelector(`[data-cargo-field="${f}"]`)?.value.trim()||"";
+        return {
+          ...base,
+          cantidad:get("cantidad")||"1",
+          equipo:get("equipo"),
+          bien:get("bien"),
+          marca:get("marca"),
+          modelo:get("modelo"),
+          caracteristicas:get("caracteristicas"),
+          codigo:get("codigo"),
+          serie:get("serie"),
+          estado:get("estado"),
+          observaciones:get("observaciones")
+        };
+      });
+  
+      const editedSoftware=software.slice(0,15).map((base,i)=>{
+        const row=document.querySelector(`[data-software-row="${i}"]`);
+        const get=f=>row?.querySelector(`[data-software-field="${f}"]`)?.value.trim()||"";
+        return {name:get("name"),version:get("version"),details:get("details")};
+      });
+  
+      const payload={
         personName:name,
-        dni,
-        sede,
-        area,
+        dni:cargoDni,
+        sede:cargoSede,
+        area:cargoArea,
+        situacion:$("#pcSituation").value.trim(),
+        initialDate:$("#pcInitialDate").value||today(),
+        finalDate:$("#pcFinalDate").value||"",
+        initialObservation:$("#pcInitialObs").value.trim(),
+        finalObservation:$("#pcFinalObs").value.trim(),
         technicianName:tech,
-        chiefName:chief,
+        chiefName,
+        items:editedItems,
+        software:editedSoftware,
         updatedAt:new Date().toISOString()
       };
-
+  
+      state.cargoOverrides[key]=payload;
+  
+      if(existingDoc){
+        Object.assign(existingDoc,payload,{
+          itemFingerprint:fingerprint,
+          updatedAt:new Date().toISOString()
+        });
+      }
+  
       await persist("EDITAR_DATOS_CARGO");
       closeModal();
-      toast("Datos guardados solo para la impresión del cargo.","success");
+      toast(`Cargo ${docCode} actualizado. El código se mantiene sin cambios.`,"success");
     };
   }
-
   const TIC_HEAD_NAME="FABIÁN PUENTE, FRANK JAIME";
-  const CARGO_BASE_SEQUENCE=16;
+  const CARGO_BASE_SEQUENCE=11;
 
   function cargoDate(value){
     const d=value?new Date(value+"T12:00:00"):new Date();

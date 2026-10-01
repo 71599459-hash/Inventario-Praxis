@@ -1813,6 +1813,8 @@
         ALTA_EQUIPO:"Alta de equipo",
         EDITAR_FICHA:"Edición de ficha",
         EDITAR_COLABORADOR:"Edición de datos de cargo",
+        CAMBIAR_COLABORADOR_RESPONSABLE:"Cambio de colaborador / responsable",
+        QUITAR_COLABORADOR:"Retiro de colaborador",
         EDITAR_DATOS_CARGO:"Edición completa de ficha de cargo",
         IMPRIMIR_CARGO:"Impresión / reimpresión de cargo",
         CONFIRMAR_RECEPCION_CARGO:"Confirmación de firma y recepción",
@@ -2121,7 +2123,201 @@ function collaborators() {
   return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,"es"));
 }
 
-function renderPeople() {
+function collaboratorRecordMatches(r,p){
+  if(!r || !p || !String(r.responsable||"").trim()) return false;
+  const rdni=String(r.dni||"").replace(/\D/g,"");
+  const pdni=String(p.dni||"").replace(/\D/g,"");
+  return Boolean(rdni && pdni && rdni===pdni) || norm(r.responsable)===norm(p.name);
+}
+
+function collaboratorDirectoryMatches(c,p){
+  if(!c || !p) return false;
+  const cdni=String(c.dni||"").replace(/\D/g,"");
+  const pdni=String(p.dni||"").replace(/\D/g,"");
+  return Boolean(cdni && pdni && cdni===pdni) || norm(c.name)===norm(p.name);
+}
+
+function openEditCollaborator(p){
+  if(!ensureEditable()) return;
+
+  const equipmentCount=p.items?.length||0;
+  const sites=[...p.sites].join(", ")||"—";
+  const areas=[...p.areas].join(", ")||"—";
+
+  showModal("Editar colaborador","Cambia el nombre o DNI del responsable sin mover ni perder sus equipos.",`
+    <div class="alert info">
+      <b>Se mantendrán los mismos ${equipmentCount} equipo(s).</b>
+      Solo cambiará el responsable. La sede, área, Código TIC, serie y demás datos de los equipos permanecen igual.
+    </div>
+    <div id="editCollaboratorAlert"></div>
+    <div class="detail-grid">
+      <div class="detail-field"><span>Sede(s) actual(es)</span><b>${esc(sites)}</b></div>
+      <div class="detail-field"><span>Área(s) actual(es)</span><b>${esc(areas)}</b></div>
+      <div class="detail-field"><span>Equipos que conservará</span><b>${equipmentCount}</b></div>
+    </div>
+    <div class="form-grid collaborator-edit-form">
+      <div class="form-field full"><label>Nombres y apellidos *</label><input id="editCollaboratorName" value="${esc(p.name||"")}"></div>
+      <div class="form-field full"><label>DNI</label><input id="editCollaboratorDni" maxlength="8" inputmode="numeric" value="${esc(p.dni||"")}" placeholder="8 dígitos"></div>
+    </div>
+    <div class="modal-actions">
+      <button id="saveCollaboratorProfile" class="btn btn-primary">Guardar nuevo responsable</button>
+    </div>
+  `);
+
+  $("#saveCollaboratorProfile").onclick=async()=>{
+    const alert=$("#editCollaboratorAlert");
+    const newName=$("#editCollaboratorName").value.trim();
+    const newDni=$("#editCollaboratorDni").value.replace(/\D/g,"").slice(0,8);
+    alert.className="";
+    alert.textContent="";
+
+    if(!newName){
+      alert.className="alert error";
+      alert.textContent="Ingresa el nombre del colaborador.";
+      return;
+    }
+    if(newDni && !/^\d{8}$/.test(newDni)){
+      alert.className="alert error";
+      alert.textContent="El DNI debe tener 8 dígitos.";
+      return;
+    }
+
+    const duplicate=collaborators().find(x=>{
+      if(x.key===p.key) return false;
+      const xDni=String(x.dni||"").replace(/\D/g,"");
+      return (newDni && xDni===newDni) || norm(x.name)===norm(newName);
+    });
+    if(duplicate){
+      alert.className="alert error";
+      alert.textContent=`Ya existe otro colaborador registrado como ${duplicate.name}${duplicate.dni?` (DNI ${duplicate.dni})`:""}.`;
+      return;
+    }
+
+    const oldName=p.name||"";
+    const oldDni=p.dni||"";
+    const affected=activeInventory().filter(r=>collaboratorRecordMatches(r,p));
+    const firstSite=[...p.sites][0]||affected[0]?.sede||"";
+    const firstArea=[...p.areas][0]||affected[0]?.area||"";
+
+    state.collaboratorDirectory=state.collaboratorDirectory||[];
+    state.webMovements=state.webMovements||[];
+
+    state.collaboratorDirectory=state.collaboratorDirectory.filter(c=>!collaboratorDirectoryMatches(c,p));
+    upsertCollaboratorDirectory({name:newName,dni:newDni,sede:firstSite,area:firstArea});
+
+    affected.forEach(r=>{
+      r.history=r.history||[];
+      r.history.unshift({
+        type:"WEB",
+        source:"Cambio de colaborador",
+        fecha:today(),
+        sede:r.sede||"",
+        area:r.area||"",
+        responsable:oldName,
+        estado:r.estado||"",
+        observaciones:`Cambio de responsable: ${oldName}${oldDni?` (DNI ${oldDni})`:""} → ${newName}${newDni?` (DNI ${newDni})`:""}. El equipo permanece en la misma ubicación.`
+      });
+
+      state.webMovements.unshift({
+        id:crypto.randomUUID(),
+        fecha:today(),
+        source:"Cambio de colaborador",
+        codigo:r.codigo,
+        equipo:r.equipo,
+        from:[r.sede,r.area,oldName].filter(Boolean).join(" / "),
+        to:[r.sede,r.area,newName].filter(Boolean).join(" / "),
+        responsable:newName,
+        motivo:"Cambio de colaborador manteniendo los mismos equipos",
+        observaciones:`Responsable anterior: ${oldName}. Nuevo responsable: ${newName}.`
+      });
+
+      r.responsable=newName;
+      r.dni=newDni;
+      if(r.locationType!=="ALMACEN") r.locationType="ASIGNADO";
+    });
+
+    await persist("CAMBIAR_COLABORADOR_RESPONSABLE");
+    closeModal();
+    renderAll();
+    if($("#peopleSearch")){
+      $("#peopleSearch").value=newDni||newName;
+      renderPeople();
+    }
+    toast(`${newName}: ${affected.length} equipo(s) conservados a su nombre.`,"success");
+  };
+}
+
+function openRemoveCollaborator(p){
+  if(!ensureEditable()) return;
+  const equipmentCount=p.items?.length||0;
+
+  showModal("Quitar colaborador","Retira al colaborador sin borrar ningún equipo del inventario.",`
+    <div class="alert error">
+      <b>Esta acción quitará a ${esc(p.name)} como responsable.</b>
+      Los ${equipmentCount} equipo(s) seguirán registrados con su mismo Código TIC, sede y área, pero quedarán <b>sin responsable</b>.
+      Los cargos ya impresos se conservan como historial.
+    </div>
+    <div class="detail-grid">
+      <div class="detail-field"><span>Colaborador</span><b>${esc(p.name||"—")}</b></div>
+      <div class="detail-field"><span>DNI</span><b>${esc(p.dni||"—")}</b></div>
+      <div class="detail-field"><span>Equipos afectados</span><b>${equipmentCount}</b></div>
+    </div>
+    <div class="modal-actions">
+      <button id="confirmRemoveCollaborator" class="btn btn-danger">Quitar colaborador</button>
+    </div>
+  `);
+
+  $("#confirmRemoveCollaborator").onclick=async()=>{
+    if(!confirm(`¿Seguro que deseas quitar a ${p.name} como responsable de ${equipmentCount} equipo(s)?`)) return;
+
+    const oldName=p.name||"";
+    const oldDni=p.dni||"";
+    const affected=activeInventory().filter(r=>collaboratorRecordMatches(r,p));
+
+    state.collaboratorDirectory=state.collaboratorDirectory||[];
+    state.webMovements=state.webMovements||[];
+    state.collaboratorDirectory=state.collaboratorDirectory.filter(c=>!collaboratorDirectoryMatches(c,p));
+
+    affected.forEach(r=>{
+      r.history=r.history||[];
+      r.history.unshift({
+        type:"WEB",
+        source:"Retiro de colaborador",
+        fecha:today(),
+        sede:r.sede||"",
+        area:r.area||"",
+        responsable:oldName,
+        estado:r.estado||"",
+        observaciones:`Se retiró al responsable ${oldName}${oldDni?` (DNI ${oldDni})`:""}. El equipo permanece en su misma sede y área sin responsable.`
+      });
+
+      state.webMovements.unshift({
+        id:crypto.randomUUID(),
+        fecha:today(),
+        source:"Retiro de colaborador",
+        codigo:r.codigo,
+        equipo:r.equipo,
+        from:[r.sede,r.area,oldName].filter(Boolean).join(" / "),
+        to:[r.sede,r.area,"SIN RESPONSABLE"].filter(Boolean).join(" / "),
+        responsable:"",
+        motivo:"Retiro de colaborador",
+        observaciones:`Se quitó a ${oldName} como responsable. El equipo conserva su ubicación.`
+      });
+
+      r.responsable="";
+      r.dni="";
+      if(r.locationType==="ASIGNADO") r.locationType="SEDE";
+    });
+
+    await persist("QUITAR_COLABORADOR");
+    closeModal();
+    if($("#peopleSearch")) $("#peopleSearch").value="";
+    renderAll();
+    toast(`${oldName} fue retirado. ${affected.length} equipo(s) quedaron sin responsable y conservaron su ubicación.`,"success");
+  };
+}
+
+function renderPeople(){
   const search=$("#peopleSearch");
   const raw=String(search?.value||"").trim();
   const q=norm(raw);
@@ -2142,19 +2338,14 @@ function renderPeople() {
         else if(dni.startsWith(digits)){score=850;match=true}
         else if(dni.includes(digits)){score=700;match=true}
       }
-
       if(q){
         if(name===q){score=Math.max(score,950);match=true}
         else if(name.startsWith(q)){score=Math.max(score,800);match=true}
         else if(name.includes(q)){score=Math.max(score,650);match=true}
-        else if(tokens.length && tokens.every(t=>name.includes(t))){
-          score=Math.max(score,600);match=true;
-        }else if(siteArea.includes(q)){
-          score=Math.max(score,200);match=true;
-        }
+        else if(tokens.length && tokens.every(t=>name.includes(t))){score=Math.max(score,600);match=true}
+        else if(siteArea.includes(q)){score=Math.max(score,200);match=true}
       }
     }
-
     return {p,score,match};
   }).filter(x=>x.match)
     .sort((a,b)=>b.score-a.score || a.p.name.localeCompare(b.p.name,"es"));
@@ -2182,6 +2373,10 @@ function renderPeople() {
         <div class="card-meta">${p.items.length===1?"equipo / registro a cargo":"equipos / registros a cargo"}<br>${esc([...p.sites].join(", ")||"Sin sede registrada")}</div>
         ${top?`<div class="person-equipment-preview"><b>Utiliza:</b> ${esc(top)}</div>`:"<div class=\"person-empty-tag\">Sin equipos asignados</div>"}
         <button class="person-view-btn" type="button" data-person-open="${esc(p.key)}">Ver equipos que utiliza</button>
+        ${canEdit()?`<div class="person-manage-actions">
+          <button class="btn btn-soft btn-small" type="button" data-person-edit="${esc(p.key)}">Editar colaborador</button>
+          <button class="btn btn-danger btn-small" type="button" data-person-remove="${esc(p.key)}">Quitar</button>
+        </div>`:""}
       </article>`;
   }).join("") || `
     <div class="people-no-results">
@@ -2189,20 +2384,20 @@ function renderPeople() {
       <span>Revisa el nombre o DNI. Los colaboradores creados manualmente también aparecen en esta búsqueda.</span>
     </div>`;
 
-  const openByKey=(key)=>openPerson(key);
+  const byKey=key=>collaborators().find(x=>x.key===key);
+  const openByKey=key=>{const p=byKey(key);if(p)openPerson(p.key)};
   $$("[data-person]").forEach(c=>{
     c.onclick=e=>{
-      if(e.target.closest("[data-person-open]")) return;
+      if(e.target.closest("[data-person-open],[data-person-edit],[data-person-remove]")) return;
       openByKey(c.dataset.person);
     };
     c.onkeydown=e=>{
-      if(e.key==="Enter"||e.key===" "){e.preventDefault();openByKey(c.dataset.person)}
+      if((e.key==="Enter"||e.key===" ")&&!e.target.closest("button")){e.preventDefault();openByKey(c.dataset.person)}
     };
   });
-  $$("[data-person-open]").forEach(b=>b.onclick=e=>{
-    e.stopPropagation();
-    openByKey(b.dataset.personOpen);
-  });
+  $$("[data-person-open]").forEach(b=>b.onclick=e=>{e.stopPropagation();openByKey(b.dataset.personOpen)});
+  $$("[data-person-edit]").forEach(b=>b.onclick=e=>{e.stopPropagation();const p=byKey(b.dataset.personEdit);if(p)openEditCollaborator(p)});
+  $$("[data-person-remove]").forEach(b=>b.onclick=e=>{e.stopPropagation();const p=byKey(b.dataset.personRemove);if(p)openRemoveCollaborator(p)});
 }
 function openCollaboratorAssignment(prefillKey="") {
   if(!ensureEditable()) return;
@@ -2642,7 +2837,6 @@ function openPerson(key){
   const summary=grouped.length
     ? `<div class="person-usage-summary">${grouped.map(([name,count])=>`<div><b>${count}</b><span>${esc(name)}</span></div>`).join("")}</div>`
     : `<div class="asset-picker-empty">Este colaborador aún no tiene equipos asignados.</div>`;
-
   const cargoStatus=latestCargo
     ? `<div class="cargo-status-box">
         <div><span>Cargo</span><b>${esc(latestCargo.code)}</b></div>
@@ -2663,14 +2857,19 @@ function openPerson(key){
     ${cargoStatus}
     <div class="modal-actions">
       ${canEdit()?'<button id="assignPersonAssets" class="btn btn-primary">Asignar / transferir equipos</button>':""}
+      ${canEdit()?'<button id="editCollaboratorProfile" class="btn btn-soft">Editar colaborador</button>':""}
       <button id="editPersonCargo" class="btn btn-soft">Editar todo el cargo</button>
       <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
       ${latestCargo&&canEdit()?`<button id="toggleCargoReceived" class="btn ${latestCargo.receivedSigned?"btn-warning":"btn-success"}">${latestCargo.receivedSigned?"Quitar recibido":"Marcar firmado y recibido"}</button>`:""}
+      ${canEdit()?'<button id="removeCollaboratorProfile" class="btn btn-danger">Quitar colaborador</button>':""}
     </div>
     <h4 class="section-title">Detalle de equipos a cargo</h4>
     ${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Sin equipos asignados.</div>'}
   `);
+
   if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);
+  if($("#editCollaboratorProfile")) $("#editCollaboratorProfile").onclick=()=>openEditCollaborator(p);
+  if($("#removeCollaboratorProfile")) $("#removeCollaboratorProfile").onclick=()=>openRemoveCollaborator(p);
   $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
   $("#printCargo").onclick=()=>printCargo(p);
   if($("#toggleCargoReceived")) $("#toggleCargoReceived").onclick=async()=>{

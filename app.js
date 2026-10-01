@@ -164,6 +164,11 @@
     };
     $("#pageTitle").textContent = titles[view][0];
     $("#pageSubtitle").textContent = titles[view][1];
+    if($("#globalSearch")){
+      $("#globalSearch").placeholder = view==="people"
+        ? "Buscar colaborador por nombre o DNI..."
+        : "Buscar código TIC, equipo, serie, colaborador, sede, área...";
+    }
     if (view === "users") { if(!canManageUsers()){ setView("dashboard"); return; } renderUsers(); renderAudit(); }
     if (window.innerWidth < 850) $("#sidebar").classList.remove("open");
   }
@@ -2299,7 +2304,6 @@ function openPerson(key) {
       ${canEdit()?'<button id="assignPersonAssets" class="btn btn-primary">Asignar / transferir equipos</button>':""}
       <button id="editPersonCargo" class="btn btn-soft">Editar datos</button>
       <button id="printCargo" class="btn btn-primary">Imprimir cargo</button>
-      <button id="filterPerson" class="btn btn-soft">Ver en inventario</button>
     </div>
 
     <h4 class="section-title">Detalle de equipos a cargo</h4>
@@ -2308,7 +2312,6 @@ function openPerson(key) {
   if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);
   $("#editPersonCargo").onclick=()=>openEditPersonCargo(p);
   $("#printCargo").onclick=()=>printCargo(p);
-  $("#filterPerson").onclick=()=>{closeModal();setView("inventory");$("#inventorySearch").value=p.dni||p.name;page=1;renderInventory()};
   wireTables();
 }
 
@@ -2376,9 +2379,17 @@ function openPerson(key) {
     if($("#reviewSearch")) $("#reviewSearch").addEventListener("input",renderReview);
     if($("#globalSearch")) $("#globalSearch").addEventListener("input",e=>{
       if(!state?.inventory?.length)return;
-      if($("#inventorySearch")) $("#inventorySearch").value=e.target.value;
+      const value=e.target.value;
+
+      if(currentView==="people"){
+        if($("#peopleSearch")) $("#peopleSearch").value=value;
+        renderPeople();
+        return;
+      }
+
+      if($("#inventorySearch")) $("#inventorySearch").value=value;
       page=1;
-      if(e.target.value.trim())setView("inventory");
+      if(value.trim())setView("inventory");
       renderInventory();
     });
   }

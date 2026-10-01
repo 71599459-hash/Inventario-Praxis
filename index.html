@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261001-2358" />
+  <link rel="stylesheet" href="styles.css?v=20261001-2450" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -311,6 +311,33 @@
 
             <article class="panel" style="margin-top:14px">
               <div class="panel-head panel-head-row">
+                <div>
+                  <h3>Auditoría de cargos</h3>
+                  <p>Conteo completo de cargos impresos, firmados/recibidos y pendientes, con detalle por sede.</p>
+                </div>
+                <button id="refreshCargoAuditBtn" class="btn btn-soft">Actualizar cargos</button>
+              </div>
+
+              <div id="cargoAuditSummary" class="quality-grid" style="margin-bottom:12px"></div>
+
+              <div class="filters cargo-audit-filters">
+                <div class="search-control"><span>⌕</span><input id="cargoAuditSearch" placeholder="Buscar código FTEC, nombre o DNI"></div>
+                <select id="cargoAuditSite"><option value="">Todas las sedes</option></select>
+                <select id="cargoAuditStatus">
+                  <option value="">Todos los estados</option>
+                  <option value="SIGNED">Firmados / recibidos</option>
+                  <option value="PENDING">Pendientes de firma</option>
+                </select>
+              </div>
+
+              <div class="cargo-audit-site-title">Conteo por sedes</div>
+              <div id="cargoAuditBySite" class="cargo-site-grid"></div>
+              <div id="cargoAuditResultCount" class="cargo-audit-result-count"></div>
+              <div id="cargoAuditTable"></div>
+            </article>
+
+            <article class="panel" style="margin-top:14px">
+              <div class="panel-head panel-head-row">
                 <div><h3>Auditoría central</h3><p>Registro de cambios del inventario, autorizaciones y cambios de rol.</p></div>
                 <button id="refreshAuditBtn" class="btn btn-soft">Actualizar auditoría</button>
               </div>
@@ -345,6 +372,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20260930-2045"></script>
-  <script src="app.js?v=20261001-2405"></script>
+  <script src="app.js?v=20261001-2450"></script>
 </body>
 </html>

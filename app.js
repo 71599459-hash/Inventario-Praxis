@@ -169,7 +169,7 @@
         ? "Buscar colaborador por nombre o DNI..."
         : "Buscar código TIC, equipo, serie, colaborador, sede, área...";
     }
-    if (view === "users") { if(!canManageUsers()){ setView("dashboard"); return; } renderUsers(); renderAudit(); }
+    if (view === "users") { if(!canManageUsers()){ setView("dashboard"); return; } renderUsers(); renderCargoAudit(); renderAudit(); }
     if (window.innerWidth < 850) $("#sidebar").classList.remove("open");
   }
 
@@ -1675,6 +1675,134 @@
     }
   }
 
+  function cargoAuditDocs(){
+    return (state?.cargoDocuments||[])
+      .filter(d=>d.printedAt)
+      .slice()
+      .sort((a,b)=>String(b.printedAt||b.createdAt||"").localeCompare(String(a.printedAt||a.createdAt||"")));
+  }
+  
+  function renderCargoAudit(){
+    if(!canManageUsers() || !$("#cargoAuditTable")) return;
+  
+    const all=cargoAuditDocs();
+    const site=$("#cargoAuditSite")?.value||"";
+    const status=$("#cargoAuditStatus")?.value||"";
+    const q=norm($("#cargoAuditSearch")?.value||"");
+  
+    const sites=[...new Set(all.map(d=>String(d.sede||"").trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,"es"));
+  
+    const siteSelect=$("#cargoAuditSite");
+    if(siteSelect){
+      const current=siteSelect.value;
+      siteSelect.innerHTML='<option value="">Todas las sedes</option>'+
+        sites.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+      if(sites.includes(current)) siteSelect.value=current;
+    }
+  
+    const signed=all.filter(d=>d.receivedSigned);
+    const pending=all.filter(d=>!d.receivedSigned);
+    const reprints=all.reduce((sum,d)=>sum+Math.max(0,(Number(d.printCount)||1)-1),0);
+  
+    if($("#cargoAuditSummary")){
+      $("#cargoAuditSummary").innerHTML=[
+        [all.length,"Cargos impresos"],
+        [signed.length,"Firmados / recibidos"],
+        [pending.length,"Pendientes de firma"],
+        [sites.length,"Sedes con cargos"],
+        [reprints,"Reimpresiones"]
+      ].map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
+    }
+  
+    const bySite=new Map();
+    all.forEach(d=>{
+      const s=String(d.sede||"SIN SEDE").trim()||"SIN SEDE";
+      if(!bySite.has(s)) bySite.set(s,{total:0,signed:0,pending:0});
+      const x=bySite.get(s);
+      x.total++;
+      if(d.receivedSigned)x.signed++;else x.pending++;
+    });
+  
+    if($("#cargoAuditBySite")){
+      $("#cargoAuditBySite").innerHTML=[...bySite.entries()]
+        .sort((a,b)=>b[1].total-a[1].total || a[0].localeCompare(b[0],"es"))
+        .map(([s,v])=>`
+          <button class="cargo-site-card ${site===s?"active":""}" type="button" data-cargo-site="${esc(s)}">
+            <span>${esc(s)}</span>
+            <b>${v.total}</b>
+            <small>${v.signed} firmados · ${v.pending} pendientes</small>
+          </button>`).join("") || '<div class="muted">Todavía no hay cargos impresos.</div>';
+      $$("[data-cargo-site]").forEach(b=>b.onclick=()=>{
+        if($("#cargoAuditSite")) $("#cargoAuditSite").value=b.dataset.cargoSite;
+        renderCargoAudit();
+      });
+    }
+  
+    const docs=all.filter(d=>{
+      const matchesSite=!site || String(d.sede||"")===site;
+      const matchesStatus=!status ||
+        (status==="SIGNED" && d.receivedSigned) ||
+        (status==="PENDING" && !d.receivedSigned);
+      const hay=norm([d.code,d.personName,d.dni,d.sede,d.area,d.createdByName,d.receivedByName].join(" "));
+      return matchesSite && matchesStatus && (!q || hay.includes(q));
+    });
+  
+    if($("#cargoAuditResultCount")){
+      $("#cargoAuditResultCount").innerHTML=`Mostrando <b>${docs.length}</b> de <b>${all.length}</b> cargos impresos`;
+    }
+  
+    const rows=docs.map(d=>`
+      <tr>
+        <td><span class="code">${esc(d.code||"—")}</span><div class="muted">Impresiones: ${Number(d.printCount)||1}</div></td>
+        <td><b>${esc(d.personName||"Sin nombre")}</b><div class="muted">DNI: ${esc(d.dni||"—")}</div></td>
+        <td><b>${esc(d.sede||"—")}</b><div class="muted">${esc(d.area||"—")}</div></td>
+        <td>${esc(fmtDateTime(d.printedAt||d.createdAt))}</td>
+        <td>${d.receivedSigned
+          ? `<span class="badge ok">FIRMADO / RECIBIDO</span><div class="muted">${esc(fmtDateTime(d.receivedAt))}</div>`
+          : '<span class="badge warn">PENDIENTE DE FIRMA</span>'}</td>
+        <td>${esc(d.createdByName||"—")}</td>
+        <td>
+          <div class="button-row">
+            <button class="btn btn-soft btn-small" type="button" data-view-cargo="${esc(d.id)}">Ver detalle</button>
+            <button class="btn ${d.receivedSigned?"btn-warning":"btn-success"} btn-small" type="button" data-audit-received="${esc(d.id)}" data-next-received="${d.receivedSigned?"false":"true"}">${d.receivedSigned?"Quitar recibido":"Marcar recibido"}</button>
+          </div>
+        </td>
+      </tr>`).join("");
+  
+    $("#cargoAuditTable").innerHTML=`<div class="table-wrap cargo-audit-table"><table>
+      <thead><tr><th>Código FTEC</th><th>Colaborador</th><th>Sede / área</th><th>Fecha impresión</th><th>Estado de recepción</th><th>Impreso por</th><th>Acciones</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7">No hay cargos que coincidan con los filtros seleccionados.</td></tr>'}</tbody>
+    </table></div>`;
+  
+    $$("[data-audit-received]").forEach(btn=>btn.onclick=async()=>{
+      const received=btn.dataset.nextReceived==="true";
+      if(!confirm(received?"¿Confirmar que el usuario firmó el cargo y recibió los equipos?":"¿Quitar la confirmación de recepción?")) return;
+      await setCargoReceived(btn.dataset.auditReceived,received);
+      renderCargoAudit();
+      await renderUsers();
+      await renderAudit();
+    });
+  
+    $$("[data-view-cargo]").forEach(btn=>btn.onclick=()=>{
+      const d=all.find(x=>x.id===btn.dataset.viewCargo);
+      if(!d)return;
+      showModal(`Cargo ${d.code||""}`,d.personName||"Detalle del cargo",`
+        <div class="detail-grid">
+          <div class="detail-field"><span>Colaborador</span><b>${esc(d.personName||"—")}</b></div>
+          <div class="detail-field"><span>DNI</span><b>${esc(d.dni||"—")}</b></div>
+          <div class="detail-field"><span>Sede</span><b>${esc(d.sede||"—")}</b></div>
+          <div class="detail-field"><span>Área</span><b>${esc(d.area||"—")}</b></div>
+          <div class="detail-field"><span>Fecha impresión</span><b>${esc(fmtDateTime(d.printedAt||d.createdAt))}</b></div>
+          <div class="detail-field"><span>Estado</span><b>${d.receivedSigned?"FIRMADO / RECIBIDO":"PENDIENTE DE FIRMA"}</b></div>
+        </div>
+        <h4 class="section-title">Equipos incluidos (${(d.items||[]).length})</h4>
+        <div class="table-wrap"><table><thead><tr><th>Código TIC</th><th>Equipo</th><th>Marca / modelo</th><th>Serie</th><th>Estado</th></tr></thead>
+        <tbody>${(d.items||[]).map(r=>`<tr><td><span class="code">${esc(r.codigo||"—")}</span></td><td>${esc(r.equipo||"—")}</td><td>${esc([r.marca,r.modelo].filter(Boolean).join(" / ")||"—")}</td><td>${esc(r.serie||"—")}</td><td>${esc(r.estado||"—")}</td></tr>`).join("")||'<tr><td colspan="5">Sin equipos registrados.</td></tr>'}</tbody></table></div>
+      `);
+    });
+  }
+
   async function renderAudit() {
     if(!canManageUsers() || !$("#auditTable")) return;
     try {
@@ -2596,7 +2724,11 @@ function openPerson(key){
     if($("#clearLocalBtn")) $("#clearLocalBtn").onclick=clearLocalData;
     if($("#createUserBtn")) $("#createUserBtn").onclick=openCreateUser;
     if($("#refreshUsersBtn")) $("#refreshUsersBtn").onclick=renderUsers;
-    if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=renderAudit;
+    if($("#refreshAuditBtn")) $("#refreshAuditBtn").onclick=()=>{renderCargoAudit();renderAudit()};
+    if($("#refreshCargoAuditBtn")) $("#refreshCargoAuditBtn").onclick=renderCargoAudit;
+    if($("#cargoAuditSearch")) $("#cargoAuditSearch").addEventListener("input",renderCargoAudit);
+    if($("#cargoAuditSite")) $("#cargoAuditSite").addEventListener("change",renderCargoAudit);
+    if($("#cargoAuditStatus")) $("#cargoAuditStatus").addEventListener("change",renderCargoAudit);
     if($("#authorizedSearch")) $("#authorizedSearch").addEventListener("input",renderUsers);
     if($("#authorizedStatus")) $("#authorizedStatus").addEventListener("change",renderUsers);
     if($("#authorizedRole")) $("#authorizedRole").addEventListener("change",renderUsers);

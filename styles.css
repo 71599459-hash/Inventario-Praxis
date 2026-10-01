@@ -435,3 +435,21 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .cargo-user-cell{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:155px}
 .cargo-user-cell>b{color:#1467c8}.cargo-user-cell .btn{margin-top:2px}
 @media(max-width:850px){.cargo-status-box{grid-template-columns:1fr}}
+
+/* Auditoría completa de cargos */
+.cargo-audit-filters{grid-template-columns:minmax(260px,1fr) 220px 220px;margin-bottom:12px}
+.cargo-audit-site-title{font-size:10px;font-weight:850;color:#31516e;margin:2px 0 8px}
+.cargo-site-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-bottom:10px}
+.cargo-site-card{border:1px solid #d8e5f0;border-radius:10px;background:#f8fbff;padding:10px;text-align:left;cursor:pointer}
+.cargo-site-card:hover,.cargo-site-card.active{border-color:#1478ed;background:#edf6ff}
+.cargo-site-card span{display:block;font-size:9px;font-weight:800;color:#31516e;text-transform:uppercase}
+.cargo-site-card b{display:block;margin-top:3px;font-size:23px;color:#1467c8;line-height:1}
+.cargo-site-card small{display:block;margin-top:5px;color:#6a8094;font-size:8px}
+.cargo-audit-result-count{margin:8px 0;color:#62798e;font-size:9px}
+.cargo-audit-result-count b{color:#174e82}
+.cargo-audit-table{max-height:430px;overflow:auto}
+.cargo-audit-table table{min-width:1050px}
+@media(max-width:850px){
+  .cargo-audit-filters{grid-template-columns:1fr}
+  .cargo-site-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

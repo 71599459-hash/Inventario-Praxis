@@ -5,5 +5,12 @@
   "display": "standalone",
   "background_color": "#f4f7fb",
   "theme_color": "#0b2945",
-  "icons": []
+  "icons": [
+    {
+      "src": "favicon-praxis-p.png?v=20261001-2",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }

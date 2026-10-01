@@ -1781,16 +1781,20 @@ function openCollaboratorAssignment(prefillKey="") {
   if(!ensureEditable()) return;
 
   const people=collaborators();
-  const warehouseCount=activeInventory().filter(r=>r.locationType==="ALMACEN").length;
+  const isWarehouseAsset=r=>{
+    const area=norm(r?.area||"");
+    return (r?.locationType==="ALMACEN" || area.includes("ALMAC")) && !String(r?.responsable||"").trim();
+  };
+  const warehouseCount=activeInventory().filter(isWarehouseAsset).length;
   const destinationOptions=people.map(p=>`<option value="${esc(p.key)}">${esc(p.name)}${p.dni?` · DNI ${esc(p.dni)}`:""}</option>`).join("");
 
   showModal("Colaboradores · asignación de equipos","Registra un colaborador nuevo o transfiere varios equipos desde Almacén TIC u otro colaborador.",`
     <div id="collabAssignAlert"></div>
 
     <div class="assignment-summary">
-      <div><b>Asignación múltiple</b><span>Selecciona todos los componentes que quedarán a nombre del colaborador.</span></div>
+      <div><b>Asignación múltiple</b><span>Agrega los componentes que quedarán a nombre del colaborador. La selección se mantendrá visible arriba hasta que guardes.</span></div>
       <div class="assignment-summary-number"><b>${warehouseCount}</b><span>en almacén</span></div>
-      <div class="assignment-summary-number"><b id="caSelectedCount">0</b><span>seleccionados</span></div>
+      <div class="assignment-summary-number"><b id="caSelectedCount">0</b><span>agregados</span></div>
     </div>
 
     <div class="form-grid collaborator-form">
@@ -1808,8 +1812,19 @@ function openCollaboratorAssignment(prefillKey="") {
       <div class="form-field full"><label>Área / aula donde utilizará los equipos *</label><input id="caArea" placeholder="Ej. SECRETARÍA / AULA / COORDINACIÓN"></div>
     </div>
 
+    <section class="selected-assets-panel">
+      <div class="selected-assets-head">
+        <div>
+          <b>Equipos agregados para este colaborador</b>
+          <span>Lo que agregues quedará aquí aunque cambies el buscador o el origen. Puedes editar el destino por equipo o quitarlo antes de guardar.</span>
+        </div>
+        <button id="caClearSelection" class="btn btn-soft" type="button">Quitar todos</button>
+      </div>
+      <div id="caSelectedAssets"></div>
+    </section>
+
     <div class="assignment-divider">
-      <div><b>Equipos a asignar o transferir</b><span>Puedes escoger equipos del almacén o cambiar equipos actualmente asignados a otro colaborador.</span></div>
+      <div><b>Buscar equipos para agregar</b><span>Puedes traer equipos del almacén o transferir equipos actualmente asignados a otro colaborador.</span></div>
     </div>
 
     <div class="assignment-filters">
@@ -1833,8 +1848,7 @@ function openCollaboratorAssignment(prefillKey="") {
 
     <div class="asset-picker-toolbar">
       <div class="button-row">
-        <button id="caSelectVisible" class="btn btn-soft" type="button">Seleccionar visibles</button>
-        <button id="caClearSelection" class="btn btn-soft" type="button">Limpiar selección</button>
+        <button id="caAddVisible" class="btn btn-soft" type="button">Agregar visibles</button>
       </div>
       <span id="caVisibleCount" class="muted"></span>
     </div>
@@ -1842,21 +1856,26 @@ function openCollaboratorAssignment(prefillKey="") {
     <div id="caAssetPicker"></div>
 
     <div class="form-field full assignment-note">
-      <label>Motivo / observación</label>
+      <label>Motivo / observación general</label>
       <textarea id="caObservation" placeholder="Ej. entrega de equipos, cambio de responsable, renovación de puesto...">Asignación de equipos al colaborador</textarea>
     </div>
 
     <div class="modal-actions assignment-actions">
-      <button id="saveCollaboratorAssignment" class="btn btn-primary">Guardar colaborador y asignación</button>
+      <button id="saveCollaboratorAssignment" class="btn btn-primary">Guardar colaborador</button>
     </div>
   `);
 
-  const selected=new Set();
+  const selected=new Map();
+  let editingSelectedId="";
   const destination=$("#caDestination");
   const source=$("#caSource");
   const origin=$("#caOrigin");
   const originWrap=$("#caOriginWrap");
   const search=$("#caAssetSearch");
+  const nameInput=$("#caName");
+  const dniInput=$("#caDni");
+  const siteInput=$("#caSite");
+  const areaInput=$("#caArea");
 
   const samePerson=(r,p)=>{
     if(!p || !r?.responsable) return false;
@@ -1867,11 +1886,106 @@ function openCollaboratorAssignment(prefillKey="") {
 
   const getDestination=()=>destination.value==="__new__" ? null : people.find(p=>p.key===destination.value);
 
+  const updateSelectedCount=()=>{
+    if($("#caSelectedCount")) $("#caSelectedCount").textContent=String(selected.size);
+    const save=$("#saveCollaboratorAssignment");
+    if(save) save.textContent=selected.size ? `Guardar colaborador y asignar ${selected.size} equipo${selected.size===1?"":"s"}` : "Guardar colaborador";
+  };
+
+  const selectedDestinationLabel=(meta)=>{
+    const sede=String(meta?.sede||"").trim() || siteInput.value.trim().toUpperCase();
+    const area=String(meta?.area||"").trim() || areaInput.value.trim();
+    return [sede,area].filter(Boolean).join(" / ") || "Se definirá con la sede y área del colaborador";
+  };
+
+  const renderSelectedAssets=()=>{
+    updateSelectedCount();
+    const host=$("#caSelectedAssets");
+    if(!host) return;
+
+    const rows=[...selected.entries()]
+      .map(([id,meta])=>({r:activeInventory().find(x=>x.id===id),meta}))
+      .filter(x=>x.r);
+
+    if(!rows.length){
+      host.innerHTML=`<div class="selected-assets-empty">Aún no has agregado equipos. Busca un componente abajo y pulsa <b>Agregar</b>.</div>`;
+      return;
+    }
+
+    host.innerHTML=`
+      <div class="table-wrap selected-assets-table">
+        <table>
+          <thead><tr><th>Código TIC</th><th>Equipo / componente</th><th>Origen actual</th><th>Destino</th><th>Acciones</th></tr></thead>
+          <tbody>${rows.map(({r,meta})=>`
+            <tr class="selected-confirmed-row">
+              <td><span class="code">${esc(r.codigo||r.id)}</span></td>
+              <td><b>${esc(r.equipo||"Sin tipo")}</b><div class="muted">${esc([r.marca,r.modelo,r.serie].filter(Boolean).join(" / "))}</div></td>
+              <td>${esc([r.sede,r.area,r.responsable||"ALMACÉN TIC"].filter(Boolean).join(" / "))}</td>
+              <td>${esc(selectedDestinationLabel(meta))}${(meta.sede||meta.area||meta.observation)?'<div class="selected-custom-tag">Destino personalizado</div>':""}</td>
+              <td>
+                <div class="selected-actions">
+                  <button class="btn btn-soft btn-small" type="button" data-edit-selected="${esc(r.id)}">Editar</button>
+                  <button class="btn btn-danger btn-small" type="button" data-remove-selected="${esc(r.id)}">Quitar</button>
+                </div>
+              </td>
+            </tr>
+            ${editingSelectedId===r.id?`
+            <tr class="selected-edit-row">
+              <td colspan="5">
+                <div class="selected-edit-box">
+                  <div class="form-grid">
+                    <div class="form-field"><label>Sede para este equipo</label><input id="caEditSite" value="${esc(meta.sede||"")}" placeholder="${esc(siteInput.value.trim().toUpperCase()||"Usar sede general")}"></div>
+                    <div class="form-field"><label>Área / aula para este equipo</label><input id="caEditArea" value="${esc(meta.area||"")}" placeholder="${esc(areaInput.value.trim()||"Usar área general")}"></div>
+                    <div class="form-field full"><label>Observación específica</label><textarea id="caEditObservation" placeholder="Opcional. Si queda vacío se usará la observación general.">${esc(meta.observation||"")}</textarea></div>
+                  </div>
+                  <div class="modal-actions">
+                    <button class="btn btn-primary btn-small" type="button" data-save-selected="${esc(r.id)}">Guardar edición</button>
+                    <button class="btn btn-soft btn-small" type="button" data-cancel-selected="${esc(r.id)}">Cancelar</button>
+                  </div>
+                </div>
+              </td>
+            </tr>`:""}
+          `).join("")}
+          </tbody>
+        </table>
+      </div>`;
+
+    $$("[data-remove-selected]").forEach(btn=>btn.onclick=()=>{
+      selected.delete(btn.dataset.removeSelected);
+      if(editingSelectedId===btn.dataset.removeSelected) editingSelectedId="";
+      renderSelectedAssets();
+      renderAssetPicker();
+    });
+
+    $$("[data-edit-selected]").forEach(btn=>btn.onclick=()=>{
+      editingSelectedId=btn.dataset.editSelected;
+      renderSelectedAssets();
+    });
+
+    $$("[data-cancel-selected]").forEach(btn=>btn.onclick=()=>{
+      editingSelectedId="";
+      renderSelectedAssets();
+    });
+
+    $$("[data-save-selected]").forEach(btn=>btn.onclick=()=>{
+      const id=btn.dataset.saveSelected;
+      const meta=selected.get(id)||{};
+      meta.sede=$("#caEditSite")?.value.trim().toUpperCase()||"";
+      meta.area=$("#caEditArea")?.value.trim()||"";
+      meta.observation=$("#caEditObservation")?.value.trim()||"";
+      selected.set(id,meta);
+      editingSelectedId="";
+      renderSelectedAssets();
+    });
+  };
+
   const syncOriginOptions=()=>{
     const dest=getDestination();
     const current=origin.value;
     const available=people.filter(p=>p.items.length>0 && (!dest || p.key!==dest.key));
-    origin.innerHTML=available.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${p.items.length} equipo(s)</option>`).join("");
+    origin.innerHTML=available.length
+      ? available.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${p.items.length} equipo(s)</option>`).join("")
+      : `<option value="">Sin colaboradores con equipos</option>`;
     if(available.some(p=>p.key===current)) origin.value=current;
     originWrap.classList.toggle("hidden",source.value!=="COLABORADOR");
   };
@@ -1885,9 +1999,9 @@ function openCollaboratorAssignment(prefillKey="") {
       if(dest && samePerson(r,dest)) return false;
 
       let matchesSource=false;
-      if(source.value==="ALMACEN") matchesSource=r.locationType==="ALMACEN";
+      if(source.value==="ALMACEN") matchesSource=isWarehouseAsset(r);
       else if(source.value==="COLABORADOR") matchesSource=Boolean(originPerson && samePerson(r,originPerson));
-      else matchesSource=r.locationType==="ALMACEN" || Boolean(r.responsable);
+      else matchesSource=isWarehouseAsset(r) || Boolean(r.responsable);
 
       if(!matchesSource) return false;
       if(!q) return true;
@@ -1899,23 +2013,28 @@ function openCollaboratorAssignment(prefillKey="") {
     });
   };
 
-  const updateSelectedCount=()=>{
-    const count=$("#caSelectedCount");
-    if(count) count.textContent=String(selected.size);
+  const addAsset=id=>{
+    if(!id || selected.has(id)) return;
+    const r=activeInventory().find(x=>x.id===id);
+    if(!r) return;
+    selected.set(id,{sede:"",area:"",observation:""});
+    renderSelectedAssets();
+    renderAssetPicker();
   };
 
   const renderAssetPicker=()=>{
     syncOriginOptions();
     const rows=assetRows();
-    $("#caVisibleCount").textContent=`${rows.length} equipo(s) disponibles con este filtro`;
+    if($("#caVisibleCount")) $("#caVisibleCount").textContent=`${rows.length} equipo(s) disponibles con este filtro`;
 
     $("#caAssetPicker").innerHTML=rows.length ? `
       <div class="table-wrap asset-picker-table">
         <table>
-          <thead><tr><th class="check-col"></th><th>Código TIC</th><th>Equipo / componente</th><th>Marca / modelo</th><th>Serie</th><th>Ubicación actual</th><th>Responsable actual</th><th>Estado</th></tr></thead>
-          <tbody>${rows.map(r=>`
-            <tr class="${selected.has(r.id)?"asset-selected":""}">
-              <td class="check-col"><input type="checkbox" data-assign-asset="${esc(r.id)}" ${selected.has(r.id)?"checked":""}></td>
+          <thead><tr><th>Código TIC</th><th>Equipo / componente</th><th>Marca / modelo</th><th>Serie</th><th>Ubicación actual</th><th>Responsable actual</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${rows.map(r=>{
+            const added=selected.has(r.id);
+            return `
+            <tr class="${added?"asset-selected":""}">
               <td><span class="code">${esc(r.codigo||r.id)}</span></td>
               <td><b>${esc(r.equipo||"Sin tipo")}</b><div class="muted">${esc(r.descripcion||"")}</div></td>
               <td>${esc([r.marca,r.modelo].filter(Boolean).join(" / ")||"—")}</td>
@@ -1923,42 +2042,36 @@ function openCollaboratorAssignment(prefillKey="") {
               <td>${esc([r.sede,r.area].filter(Boolean).join(" / ")||"—")}</td>
               <td>${esc(r.responsable||"ALMACÉN TIC")}</td>
               <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span></td>
-            </tr>`).join("")}
+              <td><button class="btn ${added?"btn-success":"btn-primary"} btn-small" type="button" data-add-asset="${esc(r.id)}" ${added?"disabled":""}>${added?"Agregado":"Agregar"}</button></td>
+            </tr>`;
+          }).join("")}
           </tbody>
         </table>
       </div>` : `<div class="asset-picker-empty">No hay equipos disponibles para el origen y filtro seleccionado.</div>`;
 
-    $("[data-assign-asset]").forEach(box=>{
-      box.onchange=()=>{
-        if(box.checked) selected.add(box.dataset.assignAsset);
-        else selected.delete(box.dataset.assignAsset);
-        box.closest("tr")?.classList.toggle("asset-selected",box.checked);
-        updateSelectedCount();
-      };
-    });
-    updateSelectedCount();
+    $$("[data-add-asset]").forEach(btn=>btn.onclick=()=>addAsset(btn.dataset.addAsset));
   };
 
   const syncDestinationFields=()=>{
     const p=getDestination();
-    const name=$("#caName"), dni=$("#caDni"), site=$("#caSite"), area=$("#caArea");
 
     if(p){
-      name.value=p.name||"";
-      dni.value=p.dni||"";
-      name.readOnly=true;
-      dni.readOnly=true;
-      site.value=[...p.sites][0]||"";
-      area.value=[...p.areas][0]||"";
+      nameInput.value=p.name||"";
+      dniInput.value=p.dni||"";
+      nameInput.readOnly=true;
+      dniInput.readOnly=true;
+      siteInput.value=[...p.sites][0]||"";
+      areaInput.value=[...p.areas][0]||"";
     }else{
-      name.readOnly=false;
-      dni.readOnly=false;
-      name.value="";
-      dni.value="";
-      site.value="";
-      area.value="";
+      nameInput.readOnly=false;
+      dniInput.readOnly=false;
+      nameInput.value="";
+      dniInput.value="";
+      siteInput.value="";
+      areaInput.value="";
     }
     syncOriginOptions();
+    renderSelectedAssets();
     renderAssetPicker();
   };
 
@@ -1966,13 +2079,23 @@ function openCollaboratorAssignment(prefillKey="") {
   source.onchange=()=>{syncOriginOptions();renderAssetPicker()};
   origin.onchange=renderAssetPicker;
   search.oninput=renderAssetPicker;
+  siteInput.oninput=renderSelectedAssets;
+  areaInput.oninput=renderSelectedAssets;
 
-  $("#caSelectVisible").onclick=()=>{
-    assetRows().forEach(r=>selected.add(r.id));
+  $("#caAddVisible").onclick=()=>{
+    assetRows().forEach(r=>{
+      if(!selected.has(r.id)) selected.set(r.id,{sede:"",area:"",observation:""});
+    });
+    renderSelectedAssets();
     renderAssetPicker();
   };
+
   $("#caClearSelection").onclick=()=>{
+    if(!selected.size) return;
+    if(!confirm(`¿Quitar los ${selected.size} equipo(s) agregados de esta asignación?`)) return;
     selected.clear();
+    editingSelectedId="";
+    renderSelectedAssets();
     renderAssetPicker();
   };
 
@@ -1984,12 +2107,14 @@ function openCollaboratorAssignment(prefillKey="") {
   $("#saveCollaboratorAssignment").onclick=async()=>{
     const alert=$("#collabAssignAlert");
     const isNew=destination.value==="__new__";
-    const name=$("#caName").value.trim();
-    const dni=$("#caDni").value.replace(/\D/g,"").slice(0,8);
-    const sede=$("#caSite").value.trim().toUpperCase();
-    const area=$("#caArea").value.trim();
-    const observation=$("#caObservation").value.trim()||"Asignación de equipos al colaborador";
-    const records=[...selected].map(id=>activeInventory().find(r=>r.id===id)).filter(Boolean);
+    const name=nameInput.value.trim();
+    const dni=dniInput.value.replace(/\D/g,"").slice(0,8);
+    const defaultSite=siteInput.value.trim().toUpperCase();
+    const defaultArea=areaInput.value.trim();
+    const generalObservation=$("#caObservation").value.trim()||"Asignación de equipos al colaborador";
+    const records=[...selected.entries()]
+      .map(([id,meta])=>({r:activeInventory().find(r=>r.id===id),meta}))
+      .filter(x=>x.r);
 
     alert.className="";
     alert.textContent="";
@@ -2003,19 +2128,29 @@ function openCollaboratorAssignment(prefillKey="") {
     if(dni && !/^\d{8}$/.test(dni)){
       alert.className="alert error";alert.textContent="El DNI debe tener 8 dígitos.";return;
     }
-    if(!sede || !area){
+    if(!defaultSite || !defaultArea){
       alert.className="alert error";alert.textContent="Completa la sede y el área donde utilizará los equipos.";return;
     }
 
-    upsertCollaboratorDirectory({name,dni,sede,area});
+    const duplicateDni=(state?.collaboratorDirectory||[]).find(c=>
+      isNew && String(c.dni||"").replace(/\D/g,"")===dni && norm(c.name)!==norm(name)
+    );
+    if(duplicateDni){
+      alert.className="alert error";alert.textContent=`El DNI ${dni} ya está registrado a nombre de ${duplicateDni.name}.`;return;
+    }
+
+    upsertCollaboratorDirectory({name,dni,sede:defaultSite,area:defaultArea});
     state.webMovements=state.webMovements||[];
 
-    records.forEach(r=>{
+    records.forEach(({r,meta})=>{
       const oldSite=r.sede||"";
       const oldArea=r.area||"";
       const oldResp=r.responsable||"";
       const oldDni=r.dni||"";
       const from=[oldSite,oldArea,oldResp].filter(Boolean).join(" / ") || "SIN UBICACIÓN";
+      const newSite=String(meta?.sede||"").trim().toUpperCase() || defaultSite;
+      const newArea=String(meta?.area||"").trim() || defaultArea;
+      const observation=String(meta?.observation||"").trim() || generalObservation;
 
       if(oldResp && norm(oldResp)!==norm(name)){
         upsertCollaboratorDirectory({name:oldResp,dni:oldDni,sede:oldSite,area:oldArea});
@@ -2033,8 +2168,8 @@ function openCollaboratorAssignment(prefillKey="") {
         observaciones:`Ubicación anterior. ${observation}`
       });
 
-      r.sede=sede;
-      r.area=area;
+      r.sede=newSite;
+      r.area=newArea;
       r.responsable=name;
       r.dni=dni;
       r.locationType="ASIGNADO";
@@ -2049,14 +2184,19 @@ function openCollaboratorAssignment(prefillKey="") {
         codigo:r.codigo,
         equipo:r.equipo,
         from,
-        to:[sede,area,name].filter(Boolean).join(" / "),
+        to:[newSite,newArea,name].filter(Boolean).join(" / "),
         responsable:name,
         motivo:observation,
         observaciones:observation
       });
     });
 
-    await persist(records.length ? "ASIGNAR_EQUIPOS_COLABORADOR" : "ALTA_COLABORADOR");
+    try{
+      await persist(records.length ? "ASIGNAR_EQUIPOS_COLABORADOR" : "ALTA_COLABORADOR");
+    }catch(_){
+      return;
+    }
+
     closeModal();
     renderAll();
 
@@ -2067,7 +2207,6 @@ function openCollaboratorAssignment(prefillKey="") {
     }
   };
 }
-
 function openPerson(key) {
   const p=collaborators().find(x=>x.key===key);if(!p)return;
   const items=p.items.slice().sort((a,b)=>(a.codigo||a.id).localeCompare(b.codigo||b.id));

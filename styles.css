@@ -367,3 +367,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   .assignment-summary>div:first-child{grid-column:1/-1}
   .assignment-filters{grid-template-columns:1fr}
 }
+
+
+/* Selección persistente de equipos para colaboradores */
+.selected-assets-panel{margin:15px 0 4px;border:1px solid #bcd8f2;border-radius:12px;background:#f7fbff;overflow:hidden}
+.selected-assets-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 13px;border-bottom:1px solid #d7e7f5;background:#edf6ff}
+.selected-assets-head>div{min-width:0}
+.selected-assets-head b{display:block;color:#123e67;font-size:13px}
+.selected-assets-head span{display:block;margin-top:3px;color:#5c7389;font-size:10px;line-height:1.45}
+.selected-assets-empty{margin:12px;padding:16px;border:1px dashed #b9cee1;border-radius:9px;background:#fff;color:#60788e;text-align:center;font-size:11px}
+.selected-assets-table{border:0;border-radius:0;max-height:285px;background:#fff}
+.selected-assets-table table{min-width:790px}
+.selected-assets-table th{top:0}
+.selected-confirmed-row td{background:#fbfdff}
+.selected-actions{display:flex;gap:5px;flex-wrap:wrap}
+.selected-custom-tag{display:inline-block;margin-top:4px;padding:3px 6px;border-radius:999px;background:#e7f2ff;color:#1467c8;font-size:8px;font-weight:800}
+.selected-edit-row td{padding:0 !important;background:#f4f9ff !important}
+.selected-edit-box{padding:12px 14px;border-top:1px solid #d8e7f5;border-bottom:1px solid #d8e7f5;background:#f4f9ff}
+.asset-picker-table td:last-child,.asset-picker-table th:last-child{width:90px;text-align:center}
+.asset-picker-table .btn[disabled]{cursor:default;opacity:1;filter:none;background:#daf7e9;color:#08754a}
+.btn-small{padding:6px 9px;font-size:9px}
+@media(max-width:850px){
+  .selected-assets-head{flex-direction:column}
+  .selected-assets-head .btn{width:100%}
+  .selected-assets-table{max-height:240px}
+}

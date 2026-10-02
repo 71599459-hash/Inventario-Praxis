@@ -1671,7 +1671,12 @@
       });
     } catch(err) {
       console.error(err);
-      $("#usersTable").innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudo cargar el personal autorizado.")+"</div>";
+      const table=$("#usersTable");
+      if(table && !table.querySelector("table")){
+        table.innerHTML="<div class='alert error'>"+esc((err&&err.message)||"No se pudo cargar el personal autorizado.")+"</div>";
+      } else {
+        toast((err&&err.message)||"Ocurrió un error al enlazar los controles de usuarios.","error");
+      }
     }
   }
 

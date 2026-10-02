@@ -153,7 +153,7 @@
       inventory:["Inventario maestro","Búsqueda, edición y control del Código TIC"],
       general:["General / Administrativos","Equipos a cargo del personal administrativo"],
       sites:["Sedes","Inventario separado por cada sede"],
-      people:["Colaboradores","Alta, asignación y transferencia de equipos por responsable"],
+      people:["Colaboradores","Equipos a cargo según la hoja General, separados por responsable"],
       warehouse:["Almacén TIC","Control de equipos almacenados"],
       networks:["Cámaras y redes","Infraestructura tecnológica y seguridad"],
       materials:["Materiales","Insumos, materiales y herramientas"],
@@ -278,7 +278,7 @@
   }
 
   function renderGeneral() {
-    const rows=activeInventory().filter(r=>r.source==="General");
+    const rows=generalSheetItems();
     $("#generalTable").innerHTML=tableHtml(rows,false); wireTables();
   }
 
@@ -2249,38 +2249,115 @@ function upsertCollaboratorDirectory(person) {
   return base;
 }
 
+function generalSheetItems() {
+  const out=[];
+  activeInventory().forEach(r=>{
+    if(!r) return;
+
+    const generalRows=(r.conflictRecords||[])
+      .filter(x=>x && x.source==="General")
+      .sort((a,b)=>(Number(b.row)||0)-(Number(a.row)||0));
+
+    const hasGeneralOrigin=r.source==="General" || generalRows.length>0;
+    if(!hasGeneralOrigin) return;
+
+    // Si este registro de origen General fue modificado desde la web,
+    // respetamos la ubicación/responsable actual guardada por el sistema.
+    const latestHistory=(r.history||[])[0]||{};
+    const hasWebChange=latestHistory.type==="WEB" || /WEB|COLABORADOR/i.test(String(latestHistory.source||""));
+    if(hasWebChange){
+      out.push({...r,source:"General"});
+      return;
+    }
+
+    if(generalRows.length){
+      const g=generalRows[0];
+      out.push({
+        ...r,
+        ...g,
+        id:r.id,
+        codigo:r.codigo,
+        equipo:r.equipo,
+        descripcion:r.descripcion,
+        detalle:r.detalle,
+        caracteristicas:r.caracteristicas,
+        marca:r.marca,
+        modelo:r.modelo,
+        serie:r.serie,
+        codigoPadre:r.codigoPadre,
+        source:"General",
+        locationType:isWarehouseArea(g.area)?"ALMACEN":g.responsable?"ASIGNADO":"SEDE"
+      });
+      return;
+    }
+
+    out.push({...r,source:"General"});
+  });
+  return out;
+}
+
 function collaborators() {
   const map=new Map();
+
   const ensure=name=>{
-    const clean=String(name||'').trim();
+    const clean=String(name||"").trim();
     const n=collaboratorNameKey(clean);
     if(!n) return null;
     const key=`NOMBRE:${n}`;
-    if(!map.has(key)) map.set(key,{key,name:clean,dni:'',items:[],sites:new Set(),areas:new Set(),manual:false,manualDni:'',dniCounts:new Map()});
+    if(!map.has(key)){
+      map.set(key,{
+        key,name:clean,dni:"",items:[],
+        sites:new Set(),areas:new Set(),
+        manual:false,manualDni:"",dniCounts:new Map()
+      });
+    }
     return map.get(key);
   };
+
   const addDni=(p,dni,manual=false)=>{
-    const clean=String(dni||'').replace(/\D/g,'').slice(0,8);
+    const clean=String(dni||"").replace(/\D/g,"").slice(0,8);
     if(!clean) return;
     if(manual) p.manualDni=clean;
     p.dniCounts.set(clean,(p.dniCounts.get(clean)||0)+1);
   };
+
+  // Directorio manual: permite que un colaborador registrado aparezca aunque
+  // todavía no tenga equipos de la hoja General.
   (state?.collaboratorDirectory||[]).forEach(c=>{
-    const p=ensure(c.name); if(!p) return;
-    p.manual=true; addDni(p,c.dni,true);
-    if(c.sede) p.sites.add(c.sede); if(c.area) p.areas.add(c.area);
+    const p=ensure(c.name);
+    if(!p) return;
+    p.manual=true;
+    addDni(p,c.dni,true);
+    if(c.sede) p.sites.add(c.sede);
+    if(c.area) p.areas.add(c.area);
   });
-  activeInventory().filter(r=>String(r.responsable||'').trim()).forEach(r=>{
-    const p=ensure(r.responsable); if(!p) return;
-    p.items.push(r); addDni(p,r.dni,false);
-    if(r.sede) p.sites.add(r.sede); if(r.area) p.areas.add(r.area);
-  });
+
+  // REGLA PRINCIPAL:
+  // Los equipos "a cargo" de un colaborador salen únicamente de la hoja General.
+  // Registros de "TIC - Almacén" aunque todavía tengan un nombre escrito NO cuentan.
+  generalSheetItems()
+    .filter(r=>String(r.responsable||"").trim() && !isWarehouseArea(r.area))
+    .forEach(r=>{
+      const p=ensure(r.responsable);
+      if(!p) return;
+      p.items.push(r);
+      addDni(p,r.dni,false);
+      if(r.sede) p.sites.add(r.sede);
+      if(r.area) p.areas.add(r.area);
+    });
+
   for(const p of map.values()){
-    if(p.manualDni) p.dni=p.manualDni;
-    else p.dni=[...p.dniCounts.entries()].sort((x,y)=>y[1]-x[1]||x[0].localeCompare(y[0]))[0]?.[0]||'';
-    delete p.manualDni; delete p.dniCounts;
+    if(p.manualDni){
+      p.dni=p.manualDni;
+    }else{
+      p.dni=[...p.dniCounts.entries()]
+        .sort((x,y)=>y[1]-x[1]||x[0].localeCompare(y[0]))[0]?.[0]||"";
+    }
+    delete p.manualDni;
+    delete p.dniCounts;
   }
-  return [...map.values()].sort((x,y)=>x.name.localeCompare(y.name,'es'));
+
+  return [...map.values()].sort((x,y)=>x.name.localeCompare(y.name,"es"));
 }
 function collaboratorRecordMatches(r,p){
   if(!r || !p || !String(r.responsable||"").trim()) return false;

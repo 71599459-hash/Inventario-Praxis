@@ -2056,25 +2056,20 @@
 
   /* COLLABORATOR_ASSIGNMENT_V2 */
 function collaboratorIdentity(name,dni) {
-  const cleanDni=String(dni||"").replace(/\D/g,"");
-  return cleanDni ? `DNI:${cleanDni}` : `NOMBRE:${norm(name)}`;
+  return `NOMBRE:${norm(name)}`;
 }
 
 function upsertCollaboratorDirectory(person) {
   state.collaboratorDirectory=state.collaboratorDirectory||[];
-  const name=String(person?.name||"").trim();
-  const dni=String(person?.dni||"").replace(/\D/g,"").slice(0,8);
+  const name=String(person?.name||'').trim();
+  const dni=String(person?.dni||'').replace(/\D/g,'').slice(0,8);
   if(!name) return null;
-  const idx=state.collaboratorDirectory.findIndex(c=>
-    (dni && String(c.dni||"").replace(/\D/g,"")===dni) ||
-    norm(c.name)===norm(name)
-  );
+  const idx=state.collaboratorDirectory.findIndex(c=>norm(c.name)===norm(name));
   const base={
     id:idx>=0 ? state.collaboratorDirectory[idx].id : crypto.randomUUID(),
-    name,
-    dni,
-    sede:String(person?.sede||"").trim().toUpperCase(),
-    area:String(person?.area||"").trim(),
+    name,dni,
+    sede:String(person?.sede||'').trim().toUpperCase(),
+    area:String(person?.area||'').trim(),
     updatedAt:new Date().toISOString()
   };
   if(idx>=0){
@@ -2087,47 +2082,38 @@ function upsertCollaboratorDirectory(person) {
 }
 
 function collaborators() {
-  const map = new Map();
-
-  const addPerson=(data,item=null)=>{
-    const name=String(data?.name||"").trim();
-    const dni=String(data?.dni||"").trim();
-    if(!name) return;
-
-    let key=collaboratorIdentity(name,dni);
-    let p=map.get(key);
-
-    if(!p){
-      p=[...map.values()].find(x=>
-        norm(x.name)===norm(name) &&
-        (!dni || !x.dni || String(x.dni).trim()===dni)
-      );
-    }
-
-    if(!p){
-      p={key,name,dni,items:[],sites:new Set(),areas:new Set(),manual:Boolean(data?.manual)};
-      map.set(key,p);
-    }else{
-      if(!p.dni && dni) p.dni=dni;
-      p.manual=p.manual||Boolean(data?.manual);
-    }
-
-    if(data?.sede) p.sites.add(data.sede);
-    if(data?.area) p.areas.add(data.area);
-    if(item) p.items.push(item);
+  const map=new Map();
+  const ensure=name=>{
+    const clean=String(name||'').trim();
+    const n=norm(clean);
+    if(!n) return null;
+    const key=`NOMBRE:${n}`;
+    if(!map.has(key)) map.set(key,{key,name:clean,dni:'',items:[],sites:new Set(),areas:new Set(),manual:false,manualDni:'',dniCounts:new Map()});
+    return map.get(key);
   };
-
-  (state?.collaboratorDirectory||[]).forEach(c=>addPerson({
-    name:c.name,dni:c.dni,sede:c.sede,area:c.area,manual:true
-  }));
-
-  activeInventory().filter(r=>r.responsable).forEach(r=>addPerson({
-    name:r.responsable,dni:r.dni,sede:r.sede,area:r.area
-  },r));
-
-  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,"es"));
+  const addDni=(p,dni,manual=false)=>{
+    const clean=String(dni||'').replace(/\D/g,'').slice(0,8);
+    if(!clean) return;
+    if(manual) p.manualDni=clean;
+    p.dniCounts.set(clean,(p.dniCounts.get(clean)||0)+1);
+  };
+  (state?.collaboratorDirectory||[]).forEach(c=>{
+    const p=ensure(c.name); if(!p) return;
+    p.manual=true; addDni(p,c.dni,true);
+    if(c.sede) p.sites.add(c.sede); if(c.area) p.areas.add(c.area);
+  });
+  activeInventory().filter(r=>String(r.responsable||'').trim()).forEach(r=>{
+    const p=ensure(r.responsable); if(!p) return;
+    p.items.push(r); addDni(p,r.dni,false);
+    if(r.sede) p.sites.add(r.sede); if(r.area) p.areas.add(r.area);
+  });
+  for(const p of map.values()){
+    if(p.manualDni) p.dni=p.manualDni;
+    else p.dni=[...p.dniCounts.entries()].sort((x,y)=>y[1]-x[1]||x[0].localeCompare(y[0]))[0]?.[0]||'';
+    delete p.manualDni; delete p.dniCounts;
+  }
+  return [...map.values()].sort((x,y)=>x.name.localeCompare(y.name,'es'));
 }
-
 function collaboratorRecordMatches(r,p){
   if(!r || !p || !String(r.responsable||"").trim()) return false;
   const rdni=String(r.dni||"").replace(/\D/g,"");

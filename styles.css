@@ -461,3 +461,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 @media(max-width:850px){
   .person-manage-actions{grid-template-columns:1fr}
 }
+
+/* Formularios controlados de inventario */
+.form-field select{width:100%;min-height:40px;border:1px solid #cbd8e5;border-radius:8px;background:#fff;padding:8px 10px;color:#17324d;font:inherit}
+.form-field select:focus{outline:none;border-color:#69a8ef;box-shadow:0 0 0 3px rgba(20,120,237,.10)}
+.form-field select:disabled,.form-field input:disabled{background:#eef3f8;color:#637a8f;cursor:not-allowed}
+.field-help{margin-top:5px;color:#6c8296;font-size:9px;line-height:1.4}
+.readonly-code{background:#eef3f8 !important;color:#294c6a !important;font-weight:850}

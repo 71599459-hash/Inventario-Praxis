@@ -396,69 +396,159 @@
   }
   function closeModal(){ $("#modal").classList.remove("open");$("#modal").setAttribute("aria-hidden","true") }
 
-  function openAddAsset() {
+  function structuredValues(field,current="",defaults=[]){
+    const values=[...defaults,current,...activeInventory().map(r=>r?.[field]||"")]
+      .map(v=>String(v||"").trim())
+      .filter(Boolean);
+    const seen=new Map();
+    values.forEach(v=>{const k=norm(v);if(k&&!seen.has(k))seen.set(k,v)});
+    return [...seen.values()].sort((a,b)=>a.localeCompare(b,"es"));
+  }
+  
+  function siteValues(current=""){
+    return structuredValues("sede",current,[]);
+  }
+  
+  function areaValuesForSite(site,current=""){
+    const target=norm(site);
+    const values=[
+      current,
+      ...activeInventory().filter(r=>!target||norm(r.sede)===target).map(r=>r.area||"")
+    ].map(v=>String(v||"").trim()).filter(Boolean);
+    const seen=new Map();
+    values.forEach(v=>{const k=norm(v);if(k&&!seen.has(k))seen.set(k,v)});
+    return [...seen.values()].sort((a,b)=>a.localeCompare(b,"es"));
+  }
+  
+  function optionList(values,current="",placeholder="Seleccione"){
+    const cur=String(current||"").trim();
+    return `<option value="">${esc(placeholder)}</option>`+
+      values.map(v=>`<option value="${esc(v)}" ${norm(v)===norm(cur)?"selected":""}>${esc(v)}</option>`).join("");
+  }
+  
+  function isWarehouseArea(area){
+    return norm(area).includes("ALMAC");
+  }
+  
+  function responsiblePeopleForLocation(site,area,currentName=""){
+    const s=norm(site), a=norm(area);
+    const currentKey=collaboratorNameKey(currentName||"");
+    return collaborators().filter(p=>{
+      const exactItem=(p.items||[]).some(r=>norm(r.sede)===s&&norm(r.area)===a);
+      const exactManual=(state?.collaboratorDirectory||[]).some(c=>
+        collaboratorNameKey(c.name)===collaboratorNameKey(p.name) &&
+        norm(c.sede)===s && norm(c.area)===a
+      );
+      const isCurrent=currentKey && collaboratorNameKey(p.name)===currentKey;
+      return exactItem||exactManual||isCurrent;
+    }).sort((x,y)=>x.name.localeCompare(y.name,"es"));
+  }
+  
+  function responsibleOptions(site,area,currentName="",keepCurrent=true){
+    if(isWarehouseArea(area)) return `<option value="">ALMACÉN TIC — SIN RESPONSABLE</option>`;
+    const currentKey=collaboratorNameKey(currentName||"");
+    const people=responsiblePeopleForLocation(site,area,keepCurrent?currentName:"");
+    let html=`<option value="">Sin responsable</option>`;
+    html+=people.map(p=>`<option value="${esc(p.key)}" ${currentKey&&collaboratorNameKey(p.name)===currentKey?"selected":""}>${esc(p.name)}${p.dni?` · DNI ${esc(p.dni)}`:""}</option>`).join("");
+    return html;
+  }
+  
+  function ticCodeValid(value){
+    return /^[A-Z]{2,3}-\d{6}$/.test(String(value||"").trim().toUpperCase());
+  }
+
+  function openAddAsset(){
     if(!ensureEditable()) return;
-    showModal("Agregar equipo","Crea un único registro maestro. El Código TIC no puede repetirse.",`
+    const equipmentValues=structuredValues("equipo","",[]);
+    const statusValues=structuredValues("estado","OPERATIVO",["OPERATIVO","USADO","MANTENIMIENTO","MALOGRADO","BAJA"]);
+    const conditionValues=structuredValues("condicion","",[]);
+    const situationValues=structuredValues("situacion","INTERNO",["INTERNO"]);
+    const sites=siteValues("");
+    const parentCodes=activeInventory().map(r=>r.codigo).filter(Boolean).sort((a,b)=>a.localeCompare(b,"es"));
+  
+    showModal("Agregar equipo","Crea un único registro maestro usando listas controladas para evitar errores de escritura.",`
       <div id="formAlert"></div>
+      <div class="alert info"><b>Código TIC:</b> usa el formato institucional, por ejemplo <b>MOU-000046</b>. El campo admite como máximo 10 caracteres.</div>
       <div class="form-grid">
-        <div class="form-field"><label>Código TIC *</label><input id="nCode" placeholder="Ej. MON-000100"></div>
-        <div class="form-field"><label>Código Padre TIC</label><input id="nParent"></div>
-        <div class="form-field"><label>Equipo / material *</label><input id="nEquipment" placeholder="Ej. MONITOR"></div>
-        <div class="form-field"><label>Descripción</label><input id="nDescription"></div>
-        <div class="form-field"><label>Marca</label><input id="nBrand"></div>
-        <div class="form-field"><label>Modelo</label><input id="nModel"></div>
-        <div class="form-field"><label>Serie o código</label><input id="nSerial"></div>
-        <div class="form-field"><label>Estado</label><input id="nStatus" value="OPERATIVO"></div>
-        <div class="form-field"><label>Condición</label><input id="nCondition"></div>
-        <div class="form-field"><label>Situación</label><input id="nSituation" value="INTERNO"></div>
-        <div class="form-field"><label>Sede</label><input id="nSite"></div>
-        <div class="form-field"><label>Área / aula</label><input id="nArea"></div>
-        <div class="form-field full"><label>Responsable</label><input id="nPerson"></div>
-        <div class="form-field"><label>DNI</label><input id="nDni" maxlength="8"></div>
-        <div class="form-field full"><label>Observaciones</label><textarea id="nObs"></textarea></div>
+        <div class="form-field"><label>Código TIC *</label><input id="nCode" maxlength="10" autocomplete="off" placeholder="Ej. MON-000100"></div>
+        <div class="form-field"><label>Código Padre TIC</label><select id="nParent"><option value="">Sin código padre</option>${parentCodes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></div>
+        <div class="form-field"><label>Equipo / material *</label><select id="nEquipment">${optionList(equipmentValues,"","Seleccione equipo / material")}</select></div>
+        <div class="form-field"><label>Descripción</label><input id="nDescription" maxlength="180"></div>
+        <div class="form-field"><label>Marca</label><input id="nBrand" maxlength="80"></div>
+        <div class="form-field"><label>Modelo</label><input id="nModel" maxlength="100"></div>
+        <div class="form-field"><label>Serie o código</label><input id="nSerial" maxlength="120"></div>
+        <div class="form-field"><label>Estado</label><select id="nStatus">${optionList(statusValues,"OPERATIVO","Seleccione estado")}</select></div>
+        <div class="form-field"><label>Condición</label><select id="nCondition">${optionList(conditionValues,"","Seleccione condición")}</select></div>
+        <div class="form-field"><label>Situación</label><select id="nSituation">${optionList(situationValues,"INTERNO","Seleccione situación")}</select></div>
+        <div class="form-field"><label>Sede *</label><select id="nSite">${optionList(sites,"","Seleccione sede")}</select></div>
+        <div class="form-field"><label>Área / aula *</label><select id="nArea"><option value="">Seleccione primero una sede</option></select></div>
+        <div class="form-field full"><label>Responsable</label><select id="nPerson"><option value="">Seleccione primero sede y área</option></select></div>
+        <div class="form-field"><label>DNI</label><input id="nDni" maxlength="8" readonly placeholder="Se completa con el colaborador"></div>
+        <div class="form-field full"><label>Observaciones</label><textarea id="nObs" maxlength="800"></textarea></div>
       </div>
       <div class="modal-actions"><button id="saveNewAsset" class="btn btn-primary">Guardar equipo</button></div>
     `);
-
+  
+    const code=$("#nCode"), site=$("#nSite"), area=$("#nArea"), person=$("#nPerson"), dni=$("#nDni");
+    code.oninput=()=>{code.value=code.value.toUpperCase().replace(/[^A-Z0-9-]/g,"").slice(0,10)};
+  
+    const refreshPeople=()=>{
+      const warehouse=isWarehouseArea(area.value);
+      person.innerHTML=responsibleOptions(site.value,area.value,"",false);
+      person.disabled=warehouse;
+      dni.value="";
+    };
+    const refreshAreas=()=>{
+      const vals=areaValuesForSite(site.value,"");
+      area.innerHTML=optionList(vals,"","Seleccione área / aula");
+      refreshPeople();
+    };
+    site.onchange=refreshAreas;
+    area.onchange=refreshPeople;
+    person.onchange=()=>{
+      const p=collaborators().find(x=>x.key===person.value);
+      dni.value=p?.dni||"";
+    };
+  
     $("#saveNewAsset").onclick=async()=>{
       const alert=$("#formAlert");
-      const code=PraxisExcel.cleanCode($("#nCode").value);
+      const codeValue=code.value.trim().toUpperCase();
       const equipment=norm($("#nEquipment").value);
-      if(!code){alert.className="alert error";alert.textContent="El Código TIC es obligatorio.";return}
+      const sede=site.value.trim().toUpperCase();
+      const areaValue=area.value.trim();
+      const warehouse=isWarehouseArea(areaValue);
+      const selectedPerson=warehouse?null:collaborators().find(x=>x.key===person.value);
+      const responsable=selectedPerson?.name||"";
+      const personDni=selectedPerson?.dni||"";
+  
+      if(!ticCodeValid(codeValue)){alert.className="alert error";alert.textContent="Código TIC inválido. Usa 2 o 3 letras, guion y 6 números. Ejemplo: MOU-000046.";return}
       if(!equipment){alert.className="alert error";alert.textContent="Equipo / Material es obligatorio.";return}
-      const duplicate=activeInventory().find(x=>x.codigo && norm(x.codigo)===code);
-      if(duplicate){
-        alert.className="alert error";
-        alert.innerHTML=`El Código TIC <b>${esc(code)}</b> ya existe. Abre ese registro y actualízalo; no se creará un duplicado.`;
-        return;
-      }
+      if(!sede||!areaValue){alert.className="alert error";alert.textContent="Selecciona la sede y el área / aula.";return}
+      const duplicate=activeInventory().find(x=>x.codigo&&norm(x.codigo)===norm(codeValue));
+      if(duplicate){alert.className="alert error";alert.innerHTML=`El Código TIC <b>${esc(codeValue)}</b> ya existe. Abre ese registro y actualízalo.`;return}
       const serial=$("#nSerial").value.trim();
       const duplicateSerial=serial&&activeInventory().find(x=>x.serie&&norm(x.serie)===norm(serial));
       if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`)) return;
-
-      const responsable=$("#nPerson").value.trim();
-      const area=$("#nArea").value.trim();
+  
       const record={
-        id:code,codigo:code,codigoPadre:PraxisExcel.cleanCode($("#nParent").value),
+        id:codeValue,codigo:codeValue,codigoPadre:$("#nParent").value,
         equipo:equipment,descripcion:$("#nDescription").value.trim(),detalle:"",
         marca:norm($("#nBrand").value),modelo:$("#nModel").value.trim(),serie:serial,
-        sede:norm($("#nSite").value),area,responsable,dni:$("#nDni").value.trim(),
+        sede,area:areaValue,responsable,dni:personDni,
         estado:norm($("#nStatus").value),condicion:norm($("#nCondition").value),
         situacion:norm($("#nSituation").value),observaciones:$("#nObs").value.trim(),
         source:"Web",cantidad:"1",
-        locationType:norm(area).includes("ALMAC")?"ALMACEN":responsable?"ASIGNADO":"SEDE",
+        locationType:warehouse?"ALMACEN":responsable?"ASIGNADO":"SEDE",
         needsReview:false,conflictLocations:[],conflictRecords:[],duplicateSources:1,
-        history:[{type:"WEB",source:"Alta web",fecha:today(),sede:norm($("#nSite").value),area,responsable,estado:norm($("#nStatus").value),observaciones:"Registro creado desde Inventario Praxis"}]
+        history:[{type:"WEB",source:"Alta web",fecha:today(),sede,area:areaValue,responsable,estado:norm($("#nStatus").value),observaciones:"Registro creado desde Inventario Praxis"}]
       };
-      state.inventory=state.inventory||[];
-      state.inventory.push(record);
+      state.inventory=state.inventory||[];state.inventory.push(record);
       state.webMovements=state.webMovements||[];
-      state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:code,equipo:equipment,from:"",to:[record.sede,area,responsable].filter(Boolean).join(" / "),responsable,observaciones:record.observaciones});
+      state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:codeValue,equipo:equipment,from:"",to:[sede,areaValue,responsable].filter(Boolean).join(" / "),responsable,observaciones:record.observaciones});
       await persist("ALTA_EQUIPO");
-      closeModal();page=1;renderAll();toast("Equipo agregado sin duplicar el Código TIC.","success");
+      closeModal();page=1;renderAll();toast("Equipo agregado con datos validados.","success");
     };
   }
-
   function openAsset(id) {
     const r=activeInventory().find(x=>x.id===id); if(!r)return; selectedId=id;
     const fields=[
@@ -492,50 +582,79 @@
     }
   }
 
-  function openEditAsset(r) {
+  function openEditAsset(r){
     if(!ensureEditable()) return;
-    showModal(`Editar ${r.codigo||r.id}`,"Actualiza la ficha sin crear un segundo registro.",`
+    const equipmentValues=structuredValues("equipo",r.equipo,[]);
+    const statusValues=structuredValues("estado",r.estado,["OPERATIVO","USADO","MANTENIMIENTO","MALOGRADO","BAJA"]);
+    const conditionValues=structuredValues("condicion",r.condicion,[]);
+    const situationValues=structuredValues("situacion",r.situacion,["INTERNO"]);
+    const sites=siteValues(r.sede);
+    const parentCodes=activeInventory().filter(x=>x!==r&&x.codigo).map(x=>x.codigo).sort((a,b)=>a.localeCompare(b,"es"));
+  
+    showModal(`Editar ${r.codigo||r.id}`,"Actualiza la ficha usando valores controlados. El Código TIC queda protegido para evitar cambios accidentales.",`
       <div id="formAlert"></div>
       <div class="form-grid">
-        <div class="form-field"><label>Código TIC</label><input id="eCode" value="${esc(r.codigo||"")}" placeholder="Ej. MON-000100"></div>
-        <div class="form-field"><label>Código Padre TIC</label><input id="eParent" value="${esc(r.codigoPadre||"")}"></div>
-        <div class="form-field"><label>Equipo / material *</label><input id="eEquipment" value="${esc(r.equipo||"")}"></div>
-        <div class="form-field"><label>Descripción</label><input id="eDescription" value="${esc(r.descripcion||"")}"></div>
-        <div class="form-field"><label>Marca</label><input id="eBrand" value="${esc(r.marca||"")}"></div>
-        <div class="form-field"><label>Modelo</label><input id="eModel" value="${esc(r.modelo||"")}"></div>
-        <div class="form-field"><label>Serie o código</label><input id="eSerial" value="${esc(r.serie||"")}"></div>
-        <div class="form-field"><label>Estado</label><input id="eStatus" value="${esc(r.estado||"")}"></div>
-        <div class="form-field"><label>Condición</label><input id="eCondition" value="${esc(r.condicion||"")}"></div>
-        <div class="form-field"><label>Situación</label><input id="eSituation" value="${esc(r.situacion||"")}"></div>
-        <div class="form-field"><label>Sede</label><input id="eSite" value="${esc(r.sede||"")}"></div>
-        <div class="form-field"><label>Área / aula</label><input id="eArea" value="${esc(r.area||"")}"></div>
-        <div class="form-field full"><label>Responsable</label><input id="ePerson" value="${esc(r.responsable||"")}"></div>
-        <div class="form-field"><label>DNI</label><input id="eDni" value="${esc(r.dni||"")}"></div>
-        <div class="form-field full"><label>Observaciones</label><textarea id="eObs">${esc(r.observaciones||"")}</textarea></div>
+        <div class="form-field"><label>Código TIC</label><input id="eCode" value="${esc(r.codigo||"")}" readonly class="readonly-code"></div>
+        <div class="form-field"><label>Código Padre TIC</label><select id="eParent"><option value="">Sin código padre</option>${parentCodes.map(c=>`<option value="${esc(c)}" ${norm(c)===norm(r.codigoPadre)?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
+        <div class="form-field"><label>Equipo / material *</label><select id="eEquipment">${optionList(equipmentValues,r.equipo,"Seleccione equipo / material")}</select></div>
+        <div class="form-field"><label>Descripción</label><input id="eDescription" maxlength="180" value="${esc(r.descripcion||"")}"></div>
+        <div class="form-field"><label>Marca</label><input id="eBrand" maxlength="80" value="${esc(r.marca||"")}"></div>
+        <div class="form-field"><label>Modelo</label><input id="eModel" maxlength="100" value="${esc(r.modelo||"")}"></div>
+        <div class="form-field"><label>Serie o código</label><input id="eSerial" maxlength="120" value="${esc(r.serie||"")}"></div>
+        <div class="form-field"><label>Estado</label><select id="eStatus">${optionList(statusValues,r.estado,"Seleccione estado")}</select></div>
+        <div class="form-field"><label>Condición</label><select id="eCondition">${optionList(conditionValues,r.condicion,"Seleccione condición")}</select></div>
+        <div class="form-field"><label>Situación</label><select id="eSituation">${optionList(situationValues,r.situacion,"Seleccione situación")}</select></div>
+        <div class="form-field"><label>Sede</label><select id="eSite">${optionList(sites,r.sede,"Seleccione sede")}</select></div>
+        <div class="form-field"><label>Área / aula</label><select id="eArea"></select></div>
+        <div class="form-field full"><label>Responsable</label><select id="ePerson"></select></div>
+        <div class="form-field"><label>DNI</label><input id="eDni" maxlength="8" readonly value="${esc(r.dni||"")}"></div>
+        <div class="form-field full"><label>Observaciones</label><textarea id="eObs" maxlength="800">${esc(r.observaciones||"")}</textarea></div>
       </div>
       <div class="modal-actions"><button id="saveEditAsset" class="btn btn-primary">Guardar cambios</button></div>
     `);
-
+  
+    const site=$("#eSite"), area=$("#eArea"), person=$("#ePerson"), dni=$("#eDni");
+    const refreshPeople=(keepCurrent=false)=>{
+      const warehouse=isWarehouseArea(area.value);
+      person.innerHTML=responsibleOptions(site.value,area.value,keepCurrent?r.responsable:"",keepCurrent);
+      person.disabled=warehouse;
+      if(warehouse){person.value="";dni.value="";return}
+      if(keepCurrent){
+        const p=collaborators().find(x=>collaboratorNameKey(x.name)===collaboratorNameKey(r.responsable||""));
+        if(p){person.value=p.key;dni.value=p.dni||r.dni||""}
+      }else{
+        dni.value="";
+      }
+    };
+    const refreshAreas=(keepCurrent=false)=>{
+      const vals=areaValuesForSite(site.value,keepCurrent?r.area:"");
+      area.innerHTML=optionList(vals,keepCurrent?r.area:"","Seleccione área / aula");
+      refreshPeople(keepCurrent);
+    };
+    refreshAreas(true);
+    site.onchange=()=>refreshAreas(false);
+    area.onchange=()=>refreshPeople(false);
+    person.onchange=()=>{const p=collaborators().find(x=>x.key===person.value);dni.value=p?.dni||""};
+  
     $("#saveEditAsset").onclick=async()=>{
       const alert=$("#formAlert");
-      const newCode=PraxisExcel.cleanCode($("#eCode").value);
       const equipment=norm($("#eEquipment").value);
       if(!equipment){alert.className="alert error";alert.textContent="Equipo / Material es obligatorio.";return}
-      if(r.codigo && !newCode){alert.className="alert error";alert.textContent="Un equipo que ya tiene Código TIC no puede quedar sin código.";return}
-      if(newCode){
-        const existing=activeInventory().find(x=>x!==r && norm(x.codigo)===newCode);
-        if(existing){alert.className="alert error";alert.innerHTML=`El Código TIC <b>${esc(newCode)}</b> ya existe en ${esc(existing.sede)} / ${esc(existing.area)}. No se puede duplicar.`;return}
-      }
+      const sede=site.value.trim().toUpperCase(), areaValue=area.value.trim();
+      if(!sede||!areaValue){alert.className="alert error";alert.textContent="Selecciona sede y área / aula.";return}
       const serial=$("#eSerial").value.trim();
       const duplicateSerial=serial&&activeInventory().find(x=>x!==r&&x.serie&&norm(x.serie)===norm(serial));
       if(duplicateSerial&&!confirm(`La serie ${serial} ya aparece en ${duplicateSerial.codigo||duplicateSerial.id}. ¿Deseas continuar?`))return;
-
+  
+      const warehouse=isWarehouseArea(areaValue);
+      const selectedPerson=warehouse?null:collaborators().find(x=>x.key===person.value);
+      const newResp=selectedPerson?.name||"";
+      const newDni=selectedPerson?.dni||"";
       const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Edición web",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Ficha anterior antes de edición"});
-
-      if(newCode && newCode!==r.codigo){ r.codigo=newCode; r.id=newCode; }
-      r.codigoPadre=PraxisExcel.cleanCode($("#eParent").value);
+  
+      r.codigoPadre=$("#eParent").value;
       r.equipo=equipment;
       r.descripcion=$("#eDescription").value.trim();
       r.marca=norm($("#eBrand").value);
@@ -544,23 +663,18 @@
       r.estado=norm($("#eStatus").value);
       r.condicion=norm($("#eCondition").value);
       r.situacion=norm($("#eSituation").value);
-      r.sede=norm($("#eSite").value);
-      r.area=$("#eArea").value.trim();
-      r.responsable=$("#ePerson").value.trim();
-      r.dni=$("#eDni").value.trim();
+      r.sede=sede;
+      r.area=areaValue;
+      r.responsable=newResp;
+      r.dni=newDni;
       r.observaciones=$("#eObs").value.trim();
-      r.locationType=norm(r.area).includes("ALMAC")?"ALMACEN":r.responsable?"ASIGNADO":"SEDE";
-
+      r.locationType=warehouse?"ALMACEN":newResp?"ASIGNADO":"SEDE";
+  
       state.webMovements=state.webMovements||[];
-      state.webMovements.unshift({
-        id:crypto.randomUUID(),fecha:today(),source:"Edición web",codigo:r.codigo,equipo:r.equipo,
-        from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),
-        responsable:r.responsable,observaciones:"Actualización de ficha"
-      });
-      await persist("EDITAR_FICHA");closeModal();renderAll();toast("Ficha actualizada y sincronizada.","success");
+      state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Edición web",codigo:r.codigo,equipo:r.equipo,from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),responsable:r.responsable,observaciones:"Actualización de ficha con listas controladas"});
+      await persist("EDITAR_FICHA");closeModal();renderAll();toast("Ficha actualizada con datos validados.","success");
     };
   }
-
   function openResolveConflict(r) {
     if(!ensureEditable()) return;
     const candidates=(r.conflictRecords&&r.conflictRecords.length?r.conflictRecords:(r.history||[]).filter(h=>h.sede||h.area||h.responsable))
@@ -601,34 +715,82 @@
     $("#manualConflict").onclick=()=>openMove(r,false);
   }
 
-  function openMove(r,toWarehouse=false) {
+  function openMove(r,toWarehouse=false){
     if(!ensureEditable()) return;
+    const sites=siteValues(r.sede);
+    const initialArea=toWarehouse?"TIC / ALMACÉN":r.area||"";
+  
     showModal(`Mover ${r.codigo||r.id}`,`Ubicación actual: ${[r.sede,r.area].filter(Boolean).join(" / ")}`,`
       <div id="formAlert"></div>
+      <div class="alert info">${toWarehouse
+        ? "<b>Envío a almacén:</b> el responsable se quitará automáticamente y no podrá editarse."
+        : "<b>Transferencia controlada:</b> selecciona sede, área y responsable desde los listados registrados para evitar nombres duplicados."}</div>
       <div class="form-grid">
-        <div class="form-field"><label>Nueva sede</label><input id="mSede" value="${esc(r.sede||"")}"></div>
-        <div class="form-field"><label>Nueva área / aula</label><input id="mArea" value="${esc(toWarehouse?"TIC / ALMACÉN":r.area||"")}"></div>
-        <div class="form-field full"><label>Nuevo responsable</label><input id="mResp" value="${esc(toWarehouse?"":r.responsable||"")}" placeholder="Dejar vacío si vuelve a almacén"></div>
-        <div class="form-field full"><label>Motivo / observación</label><textarea id="mObs" placeholder="Ej. devolución, cambio de responsable, traslado de sede..."></textarea></div>
+        <div class="form-field"><label>Nueva sede *</label><select id="mSede">${optionList(sites,r.sede,"Seleccione sede")}</select></div>
+        <div class="form-field"><label>Nueva área / aula *</label><select id="mArea"></select></div>
+        <div class="form-field full"><label>Nuevo responsable</label><select id="mResp"></select><div id="mRespHelp" class="field-help"></div></div>
+        <div class="form-field full"><label>Motivo / observación</label><textarea id="mObs" maxlength="800" placeholder="Ej. devolución, cambio de responsable, traslado de sede..."></textarea></div>
       </div>
-      <div class="modal-actions"><button id="saveMove" class="btn btn-primary">Confirmar movimiento</button></div>`);
+      <div class="modal-actions"><button id="saveMove" class="btn btn-primary">Confirmar movimiento</button></div>
+    `);
+  
+    const site=$("#mSede"), area=$("#mArea"), person=$("#mResp"), help=$("#mRespHelp");
+  
+    const refreshPeople=(keepCurrent=false)=>{
+      const warehouse=toWarehouse||isWarehouseArea(area.value);
+      person.innerHTML=responsibleOptions(site.value,area.value,keepCurrent?r.responsable:"",keepCurrent);
+      person.disabled=warehouse;
+      if(warehouse){
+        person.value="";
+        help.textContent="Almacén: el equipo queda sin responsable y sin DNI asignado.";
+      }else{
+        const count=responsiblePeopleForLocation(site.value,area.value,"").length;
+        help.textContent=count?`${count} colaborador(es) registrado(s) en esta sede y área.`:"No hay colaboradores registrados en esta sede y área. Puedes dejarlo sin responsable o registrar/asignar el colaborador desde la sección Colaboradores.";
+        if(keepCurrent){
+          const p=collaborators().find(x=>collaboratorNameKey(x.name)===collaboratorNameKey(r.responsable||""));
+          if(p) person.value=p.key;
+        }
+      }
+    };
+  
+    const refreshAreas=(keepCurrent=false)=>{
+      if(toWarehouse){
+        area.innerHTML=`<option value="TIC / ALMACÉN" selected>TIC / ALMACÉN</option>`;
+        area.disabled=true;
+        refreshPeople(false);
+        return;
+      }
+      const vals=areaValuesForSite(site.value,keepCurrent?initialArea:"");
+      area.innerHTML=optionList(vals,keepCurrent?initialArea:"","Seleccione área / aula");
+      area.disabled=false;
+      refreshPeople(keepCurrent);
+    };
+  
+    refreshAreas(true);
+    site.onchange=()=>refreshAreas(false);
+    area.onchange=()=>refreshPeople(false);
+  
     $("#saveMove").onclick=async()=>{
-      const oldSite=r.sede, oldArea=r.area, oldResp=r.responsable;
-      const newSite=$("#mSede").value.trim().toUpperCase(), newArea=$("#mArea").value.trim(), newResp=$("#mResp").value.trim(), motivo=$("#mObs").value.trim();
+      const alert=$("#formAlert");
+      const newSite=site.value.trim().toUpperCase(), newArea=area.value.trim();
+      if(!newSite||!newArea){alert.className="alert error";alert.textContent="Selecciona la nueva sede y el área / aula.";return}
+      const warehouse=toWarehouse||isWarehouseArea(newArea);
+      const selectedPerson=warehouse?null:collaborators().find(x=>x.key===person.value);
+      const newResp=selectedPerson?.name||"";
+      const newDni=selectedPerson?.dni||"";
+      const motivo=$("#mObs").value.trim();
+      const oldSite=r.sede,oldArea=r.area,oldResp=r.responsable;
+  
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Movimiento web",fecha:today(),sede:oldSite,area:oldArea,responsable:oldResp,estado:r.estado,observaciones:`Ubicación anterior. ${motivo}`});
-      r.sede=newSite;r.area=newArea;r.responsable=newResp;
-      if(toWarehouse || norm(newArea).includes("ALMAC")) r.dni="";
-      r.locationType=norm(newArea).includes("ALMAC")?"ALMACEN":newResp?"ASIGNADO":"SEDE";
-      r.needsReview=false;
-      r.conflictLocations=[];
-      r.conflictRecords=[];
+      r.sede=newSite;r.area=newArea;r.responsable=newResp;r.dni=newDni;
+      r.locationType=warehouse?"ALMACEN":newResp?"ASIGNADO":"SEDE";
+      r.needsReview=false;r.conflictLocations=[];r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Movimiento web",codigo:r.codigo,equipo:r.equipo,from:[oldSite,oldArea,oldResp].filter(Boolean).join(" / "),to:[newSite,newArea,newResp].filter(Boolean).join(" / "),responsable:newResp,motivo,observaciones:motivo});
-      await persist("MOVIMIENTO_EQUIPO");closeModal();renderAll();toast("Movimiento guardado y sincronizado sin duplicar el Código TIC.","success");
+      await persist("MOVIMIENTO_EQUIPO");closeModal();renderAll();toast(warehouse?"Equipo enviado al almacén sin responsable.":"Movimiento guardado con sede, área y responsable validados.","success");
     };
   }
-
   function openPerson(key) {
     const p=collaborators().find(x=>x.key===key);if(!p)return;
     const items=p.items.sort((a,b)=>(a.codigo||a.id).localeCompare(b.codigo||b.id));

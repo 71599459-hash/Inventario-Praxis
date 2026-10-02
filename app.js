@@ -681,10 +681,10 @@
     const key=cargoPersonKey(p);
     const base=cargoSnapshot(p.items);
     const fingerprint=cargoFingerprint(base);
-    return [...state.cargoDocuments].reverse().find(d=>
-      d.personKey===key &&
-      (d.itemFingerprint===fingerprint || cargoFingerprint(d.items||[])===fingerprint)
-    ) || null;
+    return [...state.cargoDocuments].reverse().find(d=>{
+      const samePerson=d.personKey===key || norm(d.personName||'')===norm(p.name||'');
+      return samePerson && (d.itemFingerprint===fingerprint || cargoFingerprint(d.items||[])===fingerprint);
+    }) || null;
   }
   
   function latestPrintedCargoForPerson(p){

@@ -693,7 +693,9 @@
     return [...(state?.cargoDocuments||[])].reverse().find(d=>{
       if(!d.printedAt) return false;
       const docDni=String(d.dni||"").replace(/\D/g,"");
-      return d.personKey===key || (dni && docDni===dni);
+      return d.personKey===key ||
+        collaboratorNameKey(d.personName||"")===collaboratorNameKey(p.name||"") ||
+        (dni && docDni===dni);
     }) || null;
   }
   
@@ -2055,8 +2057,12 @@
   }
 
   /* COLLABORATOR_ASSIGNMENT_V2 */
+function collaboratorNameKey(name) {
+  return norm(name).replace(/[.,;:]+/g,'').replace(/\s+/g,' ').trim();
+}
+
 function collaboratorIdentity(name,dni) {
-  return `NOMBRE:${norm(name)}`;
+  return `NOMBRE:${collaboratorNameKey(name)}`;
 }
 
 function upsertCollaboratorDirectory(person) {
@@ -2064,7 +2070,7 @@ function upsertCollaboratorDirectory(person) {
   const name=String(person?.name||'').trim();
   const dni=String(person?.dni||'').replace(/\D/g,'').slice(0,8);
   if(!name) return null;
-  const idx=state.collaboratorDirectory.findIndex(c=>norm(c.name)===norm(name));
+  const idx=state.collaboratorDirectory.findIndex(c=>collaboratorNameKey(c.name)===collaboratorNameKey(name));
   const base={
     id:idx>=0 ? state.collaboratorDirectory[idx].id : crypto.randomUUID(),
     name,dni,
@@ -2085,7 +2091,7 @@ function collaborators() {
   const map=new Map();
   const ensure=name=>{
     const clean=String(name||'').trim();
-    const n=norm(clean);
+    const n=collaboratorNameKey(clean);
     if(!n) return null;
     const key=`NOMBRE:${n}`;
     if(!map.has(key)) map.set(key,{key,name:clean,dni:'',items:[],sites:new Set(),areas:new Set(),manual:false,manualDni:'',dniCounts:new Map()});
@@ -2118,14 +2124,14 @@ function collaboratorRecordMatches(r,p){
   if(!r || !p || !String(r.responsable||"").trim()) return false;
   const rdni=String(r.dni||"").replace(/\D/g,"");
   const pdni=String(p.dni||"").replace(/\D/g,"");
-  return Boolean(rdni && pdni && rdni===pdni) || norm(r.responsable)===norm(p.name);
+  return Boolean(rdni && pdni && rdni===pdni) || collaboratorNameKey(r.responsable)===collaboratorNameKey(p.name);
 }
 
 function collaboratorDirectoryMatches(c,p){
   if(!c || !p) return false;
   const cdni=String(c.dni||"").replace(/\D/g,"");
   const pdni=String(p.dni||"").replace(/\D/g,"");
-  return Boolean(cdni && pdni && cdni===pdni) || norm(c.name)===norm(p.name);
+  return Boolean(cdni && pdni && cdni===pdni) || collaboratorNameKey(c.name)===collaboratorNameKey(p.name);
 }
 
 function openEditCollaborator(p){
@@ -2176,7 +2182,7 @@ function openEditCollaborator(p){
     const duplicate=collaborators().find(x=>{
       if(x.key===p.key) return false;
       const xDni=String(x.dni||"").replace(/\D/g,"");
-      return (newDni && xDni===newDni) || norm(x.name)===norm(newName);
+      return (newDni && xDni===newDni) || collaboratorNameKey(x.name)===collaboratorNameKey(newName);
     });
     if(duplicate){
       alert.className="alert error";

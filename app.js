@@ -3065,6 +3065,124 @@ function openCollaboratorAssignment(prefillKey="") {
     }
   };
 }
+function collaboratorEquipmentGroupsHtml(items){
+  const records=(items||[]).slice().sort((a,b)=>{
+    const ap=String(a.codigoPadre||"");
+    const bp=String(b.codigoPadre||"");
+    if(ap!==bp) return ap.localeCompare(bp,"es");
+    return String(a.codigo||a.id||"").localeCompare(String(b.codigo||b.id||""),"es");
+  });
+
+  const byCode=new Map();
+  records.forEach(r=>{
+    const code=norm(r.codigo||"");
+    if(code && !byCode.has(code)) byCode.set(code,r);
+  });
+
+  const groups=new Map();
+  records.forEach(r=>{
+    const parentRaw=String(r.codigoPadre||"").trim();
+    const parentKey=norm(parentRaw);
+    if(!parentKey) return;
+    if(!groups.has(parentKey)){
+      groups.set(parentKey,{parentCode:parentRaw,children:[]});
+    }
+    groups.get(parentKey).children.push(r);
+  });
+
+  if(!groups.size) return tableHtml(records,false);
+
+  const groupedIds=new Set();
+  const groupHtml=[...groups.values()]
+    .sort((a,b)=>String(a.parentCode).localeCompare(String(b.parentCode),"es"))
+    .map(group=>{
+      const parent=byCode.get(norm(group.parentCode))||null;
+      const children=group.children.filter(r=>!parent || r.id!==parent.id);
+      const members=parent?[parent,...children]:children.slice();
+      members.forEach(r=>groupedIds.add(r.id));
+
+      const headerName=parent?.equipo||"Equipo principal";
+      const headerMeta=[
+        parent?.marca,
+        parent?.modelo,
+        parent?.serie?`Serie: ${parent.serie}`:""
+      ].filter(Boolean).join(" · ");
+
+      const rows=members.map((r,idx)=>{
+        const isParent=Boolean(parent && r.id===parent.id);
+        const relation=isParent
+          ? '<span class="component-relation parent">PRINCIPAL</span>'
+          : '<span class="component-relation child">COMPONENTE</span>';
+        return `<tr class="${isParent?"component-parent-row":"component-child-row"}">
+          <td>
+            <span class="code">${esc(r.codigo||r.id)}</span>
+            ${r.codigoPadre?`<div class="component-parent-ref">Padre: <b>${esc(r.codigoPadre)}</b></div>`:""}
+          </td>
+          <td>${relation}</td>
+          <td><b>${esc(r.equipo||"Sin tipo")}</b>${r.detalle?`<div class="muted">${esc(r.detalle)}</div>`:""}${r.descripcion?`<div class="muted">${esc(r.descripcion)}</div>`:""}</td>
+          <td>${esc(r.marca||"—")}${r.modelo?`<div class="muted">${esc(r.modelo)}</div>`:""}</td>
+          <td>${esc(r.serie||"—")}</td>
+          <td>${esc(r.sede||"—")}</td>
+          <td>${esc(r.area||"—")}</td>
+          <td>${esc(r.responsable||"—")}${r.dni?`<div class="muted">DNI: ${esc(r.dni)}</div>`:""}</td>
+          <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span><div class="muted">${locationLabel(r)}</div></td>
+          <td><div class="table-actions"><button data-open="${esc(r.id)}">Ver</button></div></td>
+        </tr>`;
+      }).join("");
+
+      return `<section class="component-group-box">
+        <div class="component-group-header">
+          <div class="component-group-heading">
+            <div class="component-group-kicker">Equipo con componentes asociados</div>
+            <div class="component-group-main">
+              <span class="component-pc-icon">PC</span>
+              <div>
+                <b>${esc(group.parentCode)}</b>
+                <span>${esc(headerName)}</span>
+              </div>
+            </div>
+            ${headerMeta?`<div class="component-group-meta">${esc(headerMeta)}</div>`:""}
+          </div>
+          <div class="component-group-stats">
+            <strong>${children.length}</strong>
+            <span>${children.length===1?"componente":"componentes"}</span>
+          </div>
+        </div>
+        <div class="component-group-note">
+          Los registros de este recuadro están vinculados por <b>Código Padre ${esc(group.parentCode)}</b>.
+          ${parent?"La primera fila corresponde al equipo principal.":"El equipo principal no figura como registro independiente en esta lista, pero los componentes conservan su vínculo."}
+        </div>
+        <div class="table-wrap component-group-table-wrap">
+          <table class="component-group-table">
+            <thead><tr>
+              <th>Código TIC</th><th>Relación</th><th>Equipo / componente</th><th>Marca / modelo</th><th>Serie</th><th>Sede</th><th>Área</th><th>Responsable</th><th>Estado</th><th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </section>`;
+    }).join("");
+
+  // El equipo padre también debe considerarse agrupado aunque no tenga Código Padre.
+  groups.forEach(group=>{
+    const parent=byCode.get(norm(group.parentCode));
+    if(parent) groupedIds.add(parent.id);
+  });
+
+  const singles=records.filter(r=>!groupedIds.has(r.id));
+  const singlesHtml=singles.length
+    ? `<section class="component-standalone-box">
+        <div class="component-standalone-title">
+          <b>Equipos y periféricos independientes</b>
+          <span>${singles.length} registro${singles.length===1?"":"s"} sin componentes asociados por Código Padre</span>
+        </div>
+        ${tableHtml(singles,false)}
+      </section>`
+    : "";
+
+  return `<div class="collaborator-equipment-groups">${groupHtml}${singlesHtml}</div>`;
+}
+
 function openPerson(key){
   const p=collaborators().find(x=>x.key===key);if(!p)return;
   const items=p.items.slice().sort((a,b)=>(a.equipo||"").localeCompare(b.equipo||"","es") || (a.codigo||a.id||"").localeCompare(b.codigo||b.id||"","es"));
@@ -3099,8 +3217,11 @@ function openPerson(key){
       ${latestCargo&&canEdit()?`<button id="toggleCargoReceived" class="btn ${latestCargo.receivedSigned?"btn-warning":"btn-success"}">${latestCargo.receivedSigned?"Quitar recibido":"Marcar firmado y recibido"}</button>`:""}
       ${canEdit()?'<button id="removeCollaboratorProfile" class="btn btn-danger">Quitar colaborador</button>':""}
     </div>
-    <h4 class="section-title">Detalle de equipos a cargo</h4>
-    ${items.length?tableHtml(items,false):'<div class="asset-picker-empty">Sin equipos asignados.</div>'}
+    <h4 class="section-title">Equipos y componentes a cargo</h4>
+    <div class="collaborator-component-help">
+      Los componentes que tienen <b>Código Padre</b> se agrupan dentro del mismo recuadro del equipo principal para que puedas identificar fácilmente qué piezas pertenecen a cada computadora.
+    </div>
+    ${items.length?collaboratorEquipmentGroupsHtml(items):'<div class="asset-picker-empty">Sin equipos asignados.</div>'}
   `);
 
   if($("#assignPersonAssets")) $("#assignPersonAssets").onclick=()=>openCollaboratorAssignment(p.key);

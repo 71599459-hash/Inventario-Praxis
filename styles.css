@@ -468,3 +468,121 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .form-field select:disabled,.form-field input:disabled{background:#eef3f8;color:#637a8f;cursor:not-allowed}
 .field-help{margin-top:5px;color:#6c8296;font-size:9px;line-height:1.4}
 .readonly-code{background:#eef3f8 !important;color:#294c6a !important;font-weight:850}
+
+
+/* Agrupación visual de componentes por Código Padre */
+.collaborator-component-help{
+  margin:0 0 12px;
+  padding:10px 12px;
+  border:1px solid #cfe1f4;
+  border-radius:9px;
+  background:#f3f8fe;
+  color:#496982;
+  font-size:10px;
+  line-height:1.45;
+}
+.collaborator-equipment-groups{display:flex;flex-direction:column;gap:14px}
+.component-group-box{
+  border:1px solid #b8d3ec;
+  border-radius:13px;
+  background:#f8fbff;
+  overflow:hidden;
+  box-shadow:0 2px 8px rgba(17,67,107,.05);
+}
+.component-group-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:12px 14px;
+  background:linear-gradient(180deg,#edf6ff 0%,#f7fbff 100%);
+  border-bottom:1px solid #d5e5f3;
+}
+.component-group-heading{min-width:0}
+.component-group-kicker{
+  margin-bottom:5px;
+  color:#627f99;
+  font-size:8px;
+  font-weight:850;
+  letter-spacing:.45px;
+  text-transform:uppercase;
+}
+.component-group-main{display:flex;align-items:center;gap:9px}
+.component-pc-icon{
+  display:inline-flex;
+  width:34px;height:34px;
+  align-items:center;justify-content:center;
+  border-radius:9px;
+  background:#1467c8;
+  color:#fff;
+  font-size:10px;
+  font-weight:900;
+  flex:0 0 auto;
+}
+.component-group-main>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.component-group-main b{color:#0e3961;font-size:15px;letter-spacing:.2px}
+.component-group-main span{color:#496982;font-size:10px;font-weight:750}
+.component-group-meta{margin-top:5px;color:#6d8296;font-size:9px}
+.component-group-stats{
+  min-width:92px;
+  padding:8px 10px;
+  border:1px solid #c8def3;
+  border-radius:10px;
+  background:#fff;
+  text-align:center;
+}
+.component-group-stats strong{display:block;color:#1467c8;font-size:22px;line-height:1}
+.component-group-stats span{display:block;margin-top:4px;color:#607991;font-size:8px;font-weight:800;text-transform:uppercase}
+.component-group-note{
+  padding:8px 14px;
+  border-bottom:1px solid #e0ebf4;
+  background:#fff;
+  color:#607991;
+  font-size:9px;
+  line-height:1.45;
+}
+.component-group-note b{color:#24577f}
+.component-group-table-wrap{margin:0;border:0;border-radius:0;max-height:360px}
+.component-group-table{min-width:1180px}
+.component-group-table th{background:#f5f9fd}
+.component-parent-row td{background:#eef6ff !important;border-top:1px solid #c9def2;border-bottom:1px solid #c9def2}
+.component-parent-row td:first-child{box-shadow:inset 4px 0 0 #1467c8}
+.component-child-row td:first-child{box-shadow:inset 4px 0 0 #9fc4e8}
+.component-relation{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:72px;
+  padding:4px 7px;
+  border-radius:999px;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.25px;
+}
+.component-relation.parent{background:#dcecff;color:#0e5eb6}
+.component-relation.child{background:#eef2f6;color:#536d85}
+.component-parent-ref{margin-top:4px;color:#6b8094;font-size:8px}
+.component-parent-ref b{color:#315f87}
+.component-standalone-box{
+  border:1px solid #dde7f0;
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+}
+.component-standalone-title{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 12px;
+  border-bottom:1px solid #e2eaf2;
+  background:#fafcff;
+}
+.component-standalone-title b{color:#244b6d;font-size:11px}
+.component-standalone-title span{color:#72879a;font-size:9px;text-align:right}
+.component-standalone-box .table-wrap{border:0;border-radius:0;margin:0}
+@media(max-width:850px){
+  .component-group-header{align-items:flex-start}
+  .component-group-stats{min-width:76px}
+  .component-standalone-title{flex-direction:column}
+  .component-standalone-title span{text-align:left}
+}

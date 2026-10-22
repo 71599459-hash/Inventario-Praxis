@@ -187,6 +187,124 @@
       </div>`).join("") || `<div class="muted">Sin datos.</div>`;
   }
 
+function availabilityBucket(r) {
+  // Usar la ubicación ACTUAL, no el origen histórico del Excel.
+  const area=norm(r?.area||"");
+  const inWarehouse=r?.locationType==="ALMACEN" || (!r?.locationType && area.includes("ALMAC"));
+  if(!inWarehouse) return null;
+
+  const estado=norm(r?.estado||"");
+  const condicion=norm(r?.condicion||"");
+  const combined=`${estado} ${condicion}`;
+  const owner=norm(r?.responsable||"").trim();
+  const isGenericOwner=!owner || /^(SIN RESPONSABLE|NO ASIGNADO|NINGUNO|ALMACEN|ALMACEN TIC|TIC ALMACEN|S\/R|N\/A|NA)$/.test(owner);
+  const hasAssignment=(!isGenericOwner) || Boolean(String(r?.dni||"").trim());
+  const invalid=/MALOGRAD|MALO|INOPERAT|NO OPERAT|AVERI|REPARAC|MANTEN|BAJA|DESCART|OBSOLE|NO FUNCION|DEFECT|DAÑAD|DANAD|ROTO|QUEMAD|FUERA DE SERVICIO|INUTILIZ/.test(combined);
+  if(invalid) return "NOT_USABLE";
+  if(hasAssignment || r?.needsReview) return "VERIFY";
+  const usable=/OPERAT|FUNCIONAND|FUNCIONAL|BUENO|NUEVO|EXCELENTE|DISPONIBLE|REUTILIZABLE|EN BUEN ESTADO/.test(estado);
+  return usable ? "AVAILABLE" : "VERIFY";
+}
+
+function renderAvailabilityDashboard() {
+  const table=$("#availableInventoryTable");
+  const typeControl=$("#availableTypeFilter");
+  const siteControl=$("#availableSiteFilter");
+  const statusControl=$("#availableStatusFilter");
+  if(!table || !typeControl || !siteControl || !statusControl) return;
+
+  const records=activeInventory().map(r=>({r,bucket:availabilityBucket(r)})).filter(x=>x.bucket);
+  const typeValue=typeControl.value, siteValue=siteControl.value, statusValue=statusControl.value||"AVAILABLE";
+
+  // Todas las categorías del inventario para permitir consultar también tipos con 0 disponibles.
+  const types=new Map();
+  activeInventory().forEach(r=>{
+    const label=String(r.equipo||"").trim();
+    const key=norm(label);
+    if(key && !types.has(key)) types.set(key,label);
+  });
+  const sortedTypes=[...types.entries()].sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  typeControl.innerHTML='<option value="">Todos los equipos</option>'+
+    sortedTypes.map(([k,label])=>`<option value="${esc(k)}">${esc(label)}</option>`).join("");
+  typeControl.value=types.has(typeValue)?typeValue:"";
+
+  const sites=new Map();
+  records.forEach(({r})=>{
+    const label=String(r.sede||"").trim()||"SIN SEDE";
+    const key=norm(label);
+    if(!sites.has(key)) sites.set(key,label);
+  });
+  siteControl.innerHTML='<option value="">Todas las sedes</option>'+
+    [...sites.entries()].sort((a,b)=>a[1].localeCompare(b[1],"es"))
+      .map(([k,label])=>`<option value="${esc(k)}">${esc(label)}</option>`).join("");
+  siteControl.value=sites.has(siteValue)?siteValue:"";
+
+  const chosenType=typeControl.value, chosenSite=siteControl.value;
+  const matched=records.filter(({r})=>
+    (!chosenType||norm(r.equipo||"")===chosenType) &&
+    (!chosenSite||norm(String(r.sede||"").trim()||"SIN SEDE")===chosenSite)
+  );
+  const available=matched.filter(x=>x.bucket==="AVAILABLE");
+  const verify=matched.filter(x=>x.bucket==="VERIFY");
+  const unusable=matched.filter(x=>x.bucket==="NOT_USABLE");
+  const counts={AVAILABLE:available.length,VERIFY:verify.length,NOT_USABLE:unusable.length,ALL:matched.length};
+  const display=matched.filter(x=>statusValue==="ALL"||x.bucket===statusValue);
+  const statusLabels={AVAILABLE:"Disponibles para asignación",VERIFY:"Pendientes de verificación",NOT_USABLE:"No aptos para asignación",ALL:"Total localizado en almacén"};
+
+  $("#availableSummary").innerHTML=[
+    [counts.AVAILABLE,"Disponibles","good"],
+    [counts.VERIFY,"Por verificar","review"],
+    [counts.NOT_USABLE,"No aptos","disabled"]
+  ].map(([count,label,kind])=>
+    `<div class="availability-stat ${kind}"><strong>${count}</strong><span>${label}</span></div>`
+  ).join("");
+  $("#availableResultHeading").textContent=statusLabels[statusValue]||statusLabels.AVAILABLE;
+  $("#availableResultCount").textContent=String(display.length);
+  $("#availableResultDescription").textContent=
+    `${chosenType?types.get(chosenType)||"Equipo":"Todos los tipos"} · ${chosenSite?sites.get(chosenSite)||"Sede":"Todas las sedes"} · ${display.length} registro(s)`;
+
+  const groupMap=new Map();
+  display.forEach(({r})=>{
+    const sede=String(r.sede||"").trim()||"SIN SEDE";
+    const area=String(r.area||"").trim()||"ÁREA SIN INDICAR";
+    const key=`${norm(sede)}|${norm(area)}`;
+    const group=groupMap.get(key)||{sede,area,n:0};
+    group.n++;
+    groupMap.set(key,group);
+  });
+  const locations=[...groupMap.values()].sort((a,b)=>b.n-a.n||a.sede.localeCompare(b.sede,"es"));
+  $("#availableLocations").innerHTML=locations.length
+    ? locations.map(g=>`<div class="availability-location">
+        <div><b>${esc(g.sede)}</b><span>${esc(g.area)}</span></div><strong>${g.n}</strong>
+      </div>`).join("")
+    : '<div class="availability-empty-small">Sin ubicaciones para los filtros seleccionados.</div>';
+
+  const bucketLabels={AVAILABLE:"Disponible",VERIFY:"Verificar",NOT_USABLE:"No apto"};
+  const bucketClasses={AVAILABLE:"ok",VERIFY:"warn",NOT_USABLE:"bad"};
+  const rows=display.slice().sort((a,b)=>
+    String(a.r.sede||"").localeCompare(String(b.r.sede||""),"es") ||
+    String(a.r.area||"").localeCompare(String(b.r.area||""),"es") ||
+    String(a.r.codigo||a.r.id||"").localeCompare(String(b.r.codigo||b.r.id||""),"es")
+  ).map(({r,bucket})=>`<tr>
+    <td><span class="code">${esc(r.codigo||r.id||"—")}</span>${r.codigoPadre?`<div class="muted">Padre: ${esc(r.codigoPadre)}</div>`:""}</td>
+    <td><b>${esc(r.equipo||"Sin tipo")}</b>${r.descripcion?`<div class="muted">${esc(r.descripcion)}</div>`:""}</td>
+    <td>${esc(r.marca||"—")}${r.modelo?`<div class="muted">${esc(r.modelo)}</div>`:""}</td>
+    <td>${esc(r.serie||"—")}</td>
+    <td><b>${esc(r.sede||"Sin sede")}</b><div class="muted">${esc(r.area||"Área sin indicar")}</div></td>
+    <td><span class="badge ${statusClass(r.estado)}">${esc(r.estado||"SIN ESTADO")}</span></td>
+    <td><span class="badge ${bucketClasses[bucket]}">${bucketLabels[bucket]}</span>${bucket==="VERIFY"?'<div class="muted">Comprobar estado / responsable / ubicación</div>':""}</td>
+    <td><button class="btn btn-soft btn-small" type="button" data-open="${esc(r.id)}">Ver ficha</button></td>
+  </tr>`).join("");
+  table.innerHTML=`
+    <div class="table-wrap availability-table-wrap">
+      <table>
+        <thead><tr><th>Código TIC</th><th>Equipo</th><th>Marca / modelo</th><th>Serie</th><th>Ubicación exacta</th><th>Estado</th><th>Disponibilidad</th><th>Detalle</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="8" class="availability-table-empty">No hay equipos con los filtros y el estado seleccionados.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  $("#availableInventoryTable [data-open]").forEach(button=>button.onclick=()=>openAsset(button.dataset.open));
+}
+
   function renderDashboard() {
     const inv = activeInventory();
     const coded = inv.filter(r=>r.codigo).length;
@@ -217,6 +335,7 @@
     ];
     $("#qualityGrid").innerHTML = q.map(([n,l])=>`<div class="quality-box"><b>${n}</b><span>${esc(l)}</span></div>`).join("");
     $("#dashboardTable").innerHTML = tableHtml(inv.slice(0,10), false);
+    renderAvailabilityDashboard();
   }
 
   function fillFilters() {
@@ -3302,6 +3421,10 @@ function openPerson(key){
 
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("input",()=>{page=1;renderInventory()});
+    });
+    ["availableTypeFilter","availableSiteFilter","availableStatusFilter"].forEach(id=>{
+      const el=$("#"+id);
+      if(el) el.addEventListener("change",renderAvailabilityDashboard);
     });
     if($("#peopleSearch")) $("#peopleSearch").addEventListener("input",renderPeople);
     if($("#reviewSearch")) $("#reviewSearch").addEventListener("input",renderReview);

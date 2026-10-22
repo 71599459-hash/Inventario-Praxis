@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261005-1304" />
+  <link rel="stylesheet" href="styles.css?v=20261022-1308" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -121,6 +121,46 @@
         <div id="workspace" class="hidden">
           <section class="view active" data-view-panel="dashboard">
             <div id="kpiGrid" class="kpi-grid"></div>
+
+            <article class="panel availability-panel" aria-labelledby="availabilityTitle">
+              <div class="panel-head panel-head-row availability-panel-header">
+                <div>
+                  <h3 id="availabilityTitle">Equipos disponibles para asignar</h3>
+                  <p>Consulta cuántos monitores, mouse, teclados y otros equipos están sin uso, y en qué almacén o sede se encuentran.</p>
+                </div>
+                <div class="availability-help">Datos actuales del inventario maestro · Consulta sin modificar registros</div>
+              </div>
+              <div class="availability-controls">
+                <div class="form-field">
+                  <label for="availableTypeFilter">Tipo de equipo</label>
+                  <select id="availableTypeFilter" aria-label="Seleccionar tipo de equipo"><option value="">Todos los equipos</option></select>
+                </div>
+                <div class="form-field">
+                  <label for="availableSiteFilter">Sede</label>
+                  <select id="availableSiteFilter" aria-label="Seleccionar sede"><option value="">Todas las sedes</option></select>
+                </div>
+                <div class="form-field">
+                  <label for="availableStatusFilter">Disponibilidad</label>
+                  <select id="availableStatusFilter" aria-label="Seleccionar disponibilidad">
+                    <option value="AVAILABLE" selected>Listos para asignar</option>
+                    <option value="VERIFY">Por verificar</option>
+                    <option value="NOT_USABLE">No aptos</option>
+                    <option value="ALL">Todos los del almacén</option>
+                  </select>
+                </div>
+              </div>
+              <div id="availableSummary" class="availability-summary" aria-live="polite"></div>
+              <div class="availability-disclaimer">Se considera disponible al equipo ubicado actualmente en <b>almacén</b>, sin responsable activo, con estado utilizable y sin conflictos de ubicación. Los casos dudosos se muestran en <b>Por verificar</b>; los averiados o en mantenimiento, en <b>No aptos</b>.</div>
+              <div class="availability-results-header">
+                <div>
+                  <h4 id="availableResultHeading">Disponibles para asignación</h4>
+                  <p id="availableResultDescription">Selecciona el tipo de equipo y la sede.</p>
+                </div>
+                <div class="availability-selected-total"><strong id="availableResultCount">0</strong><span>equipos</span></div>
+              </div>
+              <div id="availableLocations" class="availability-locations"></div>
+              <div id="availableInventoryTable"></div>
+            </article>
 
             <div class="dashboard-grid">
               <article class="panel">
@@ -372,6 +412,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20260930-2045"></script>
-  <script src="app.js?v=20261005-1304"></script>
+  <script src="app.js?v=20261022-1308"></script>
 </body>
 </html>

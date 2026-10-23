@@ -1126,11 +1126,14 @@ async function importExcelDiagnostics(file){
     setAssetFormSaving(button,true);
     try{
       await saveAndVerifyAsset(r.id,"EDITAR_FICHA",expected);
-      closeModal();renderAll();openAsset(r.id);toast("Ficha guardada y verificada en Supabase.","success");
     }catch(err){
       assetSaveError(err,alert);
       renderAll();
+      return;
     }finally{setAssetFormSaving(button,false);}
+    closeModal();
+    try{renderAll();openAsset(r.id)}catch(err){console.error("Error al mostrar la ficha",err);toast("El cambio se guardó; recarga la pantalla para visualizarlo.","error");return;}
+    toast(cloudMode?"Ficha guardada y verificada en Supabase.":"Ficha guardada en el modo local.","success");
     };
   }
   function openResolveConflict(r) {
@@ -1277,11 +1280,16 @@ async function importExcelDiagnostics(file){
     setAssetFormSaving(button,true);
     try{
       await saveAndVerifyAsset(r.id,"MOVIMIENTO_EQUIPO",expected);
-      closeModal();renderAll();openAsset(r.id);
-      toast(warehouse?"Equipo enviado al almacén y verificado en Supabase.":"Movimiento confirmado en Supabase.","success");
     }catch(err){
-      assetSaveError(err,alert);renderAll();
+      assetSaveError(err,alert);
+      renderAll();
+      return;
     }finally{setAssetFormSaving(button,false);}
+    closeModal();
+    try{renderAll();openAsset(r.id)}catch(err){console.error("Error al mostrar movimiento",err);toast("El movimiento se guardó; recarga la pantalla para visualizarlo.","error");return;}
+    toast(cloudMode
+      ?warehouse?"Equipo enviado al almacén y verificado en Supabase.":"Movimiento confirmado en Supabase."
+      :"Movimiento guardado en el modo local.","success");
     };
   }
   function openPerson(key) {
@@ -2041,7 +2049,7 @@ async function importExcelDiagnostics(file){
     if(!ensureEditable()) return;
     try{
       if(state?.inventory?.length){
-        const ok=confirm("Ya existe un inventario cargado en este navegador. La nueva importación reemplazará el estado actual. Se guardará una copia de recuperación automática. ¿Continuar?");
+        const ok=confirm("Esta importación incorporará la nueva versión del Excel y conservará las ediciones, movimientos y asignaciones realizados desde la web. Se guardará una copia local de recuperación antes de comenzar. ¿Continuar?");
         if(!ok) return;
         await PraxisDB.set("praxis-previous-state-v2",state);
       }

@@ -642,3 +642,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .availability-table-wrap table{min-width:1320px}
 @media(max-width:1100px){.availability-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:580px){.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.availability-help{align-items:stretch}.availability-help .btn{width:100%}}
+
+/* Consultar existencias de almacén por equipo y condición */
+.availability-controls{grid-template-columns:repeat(4,minmax(0,1fr))}
+.availability-item-search{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.availability-item-search label{font-size:10px;font-weight:750;color:#48637e}
+.availability-item-search input{width:100%;min-height:42px;padding:9px 12px;border:1px solid #cedce9;border-radius:9px;font-size:12px;background:#fff}
+.availability-item-search input:focus{outline:2px solid rgba(20,120,237,.28);border-color:#1478ed}
+.availability-scope-description{margin:6px 0 10px;font-size:11px;font-weight:700;color:#315874}
+.availability-stat{cursor:pointer;text-align:left;font:inherit;transition:border-color .12s,box-shadow .12s,transform .12s}
+.availability-stat:hover{border-color:#65a6e7;transform:translateY(-1px)}
+.availability-stat.active{outline:2px solid #1676dc;outline-offset:0;box-shadow:0 0 0 3px rgba(20,120,237,.10)}
+.availability-stat:focus-visible{outline:3px solid #1676dc;outline-offset:2px}
+@media(max-width:1100px){.availability-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.availability-controls{grid-template-columns:minmax(0,1fr)}}

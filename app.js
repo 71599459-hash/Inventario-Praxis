@@ -212,14 +212,18 @@ function equipmentDiagnostic(r){
   else if(suspicious)health="REVIEW";
   else if(goodStatus)health="GOOD";
 
-  const inWarehouse=r?.locationType==="ALMACEN" || (!r?.locationType && norm(r?.area||"").includes("ALMAC"));
+  // Una fila de "TIC - Almacén" puede referirse a un equipo ubicado en otro ambiente.
+  // Por eso la ubicación actual manda sobre el nombre de la hoja de origen.
+  const areaActual=norm(r?.area||"");
+  const inWarehouse=areaActual.includes("ALMAC") ||
+    (!areaActual && r?.locationType==="ALMACEN");
   const owner=norm(r?.responsable||"");
   const generic=!owner||/^(ALMACEN|TIC ALMACEN|SIN RESPONSABLE|SIN ASIGNAR|NO ASIGNADO|NINGUNO|N\/A|NA|S\/R)$/.test(owner);
   const namedOwner=!generic || Boolean(String(r?.dni||"").trim());
   const activeUsage=/LO ESTA USANDO|LA ESTA USANDO|EN USO (?:POR|ACTUALMENTE)|SIENDO USAD[OA]|ACTUALMENTE (?:EN USO|USA|UTILIZA)|USO TEMPORAL|PRESTAD[OA] A|ASIGNAD[OA] A|EN PRESTAMO|LO UTILIZA/.test(notes);
   const reserved=/RESERVAD[OA]|LISTO PARA (?:LA )?VENTA|DESTINAD[OA] A VENTA|EN VENTA|PARA VENTA/.test(notes);
   const inUse=(r?.locationType==="ASIGNADO"&&!inWarehouse)||activeUsage;
-  const available=inWarehouse && !namedOwner && !inUse && !reserved && !r?.needsReview && health==="GOOD";
+  const available=inWarehouse && areaActual.includes("ALMAC") && !namedOwner && !inUse && !reserved && !r?.needsReview && health==="GOOD";
   const pending=!available && !inUse && (health==="REVIEW"||Boolean(r?.needsReview)||(inWarehouse&&(namedOwner||reserved))||(health==="GOOD"&&!inWarehouse));
   const reasons=[];
   if(critical || brokenStatus) reasons.push("Falla crítica o equipo malogrado");
@@ -247,89 +251,131 @@ function renderAvailabilityDashboard(){
   const host=$("#availableInventoryTable");
   const typeControl=$("#availableTypeFilter");
   const siteControl=$("#availableSiteFilter");
+  const locationControl=$("#availableLocationFilter");
+  const searchControl=$("#availableItemSearch");
   const statusControl=$("#availableStatusFilter");
-  if(!host || !typeControl || !siteControl || !statusControl)return;
+  if(!host||!typeControl||!siteControl||!locationControl||!statusControl)return;
 
   const inventory=activeInventory();
+  const previousType=typeControl.value,previousSite=siteControl.value;
+  const requestedLocation=locationControl.value||"WAREHOUSE";
+  const query=norm(searchControl?.value||"");
   const types=new Map(),sites=new Map();
   inventory.forEach(r=>{
-    const t=String(r.equipo||"").trim();
-    if(t && !types.has(norm(t)))types.set(norm(t),t);
-    const s=String(r.sede||"").trim()||"SIN SEDE";
-    if(!sites.has(norm(s)))sites.set(norm(s),s);
+    const type=String(r.equipo||"").trim();
+    if(type&&!types.has(norm(type)))types.set(norm(type),type);
+    const site=String(r.sede||"").trim()||"SIN SEDE";
+    if(!sites.has(norm(site)))sites.set(norm(site),site);
   });
-  const priorType=typeControl.value,priorSite=siteControl.value;
-  typeControl.innerHTML='<option value="">Todos los equipos</option>'+
-    [...types].sort((a,b)=>a[1].localeCompare(b[1],"es")).map(([key,value])=>`<option value="${esc(key)}">${esc(value)}</option>`).join("");
-  typeControl.value=types.has(priorType)?priorType:"";
+  typeControl.innerHTML='<option value="">Todos los tipos</option>'+
+    [...types].sort((a,b)=>a[1].localeCompare(b[1],"es"))
+      .map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join("");
+  typeControl.value=types.has(previousType)?previousType:"";
   siteControl.innerHTML='<option value="">Todas las sedes</option>'+
-    [...sites].sort((a,b)=>a[1].localeCompare(b[1],"es")).map(([key,value])=>`<option value="${esc(key)}">${esc(value)}</option>`).join("");
-  siteControl.value=sites.has(priorSite)?priorSite:"";
+    [...sites].sort((a,b)=>a[1].localeCompare(b[1],"es"))
+      .map(([key,label])=>`<option value="${esc(key)}">${esc(label)}</option>`).join("");
+  siteControl.value=sites.has(previousSite)?previousSite:"";
 
-  const chosenType=typeControl.value,chosenSite=siteControl.value,filter=statusControl.value||"AVAILABLE";
-  const matched=inventory.filter(r=>(!chosenType||norm(r.equipo)===chosenType)&&
-    (!chosenSite||norm(String(r.sede||"").trim()||"SIN SEDE")===chosenSite))
-    .map(r=>({r,d:equipmentDiagnostic(r)}));
-  const stats=[
-    [matched.length,"Total","total"],
-    [matched.filter(x=>x.d.available).length,"Disponibles","good"],
-    [matched.filter(x=>x.d.health==="GOOD").length,"Buen estado","good"],
-    [matched.filter(x=>x.d.health==="DEFICIENT").length,"Deficientes","review"],
-    [matched.filter(x=>x.d.health==="BROKEN").length,"Malogrados","bad"],
-    [matched.filter(x=>x.d.inUse).length,"En uso","info"],
-    [matched.filter(x=>x.d.pending).length,"Por verificar","review"]
+  const locationNames={WAREHOUSE:"Almacén TIC",OUTSIDE:"Fuera de almacén",ALL:"Todo el inventario"};
+  const type=typeControl.value,site=siteControl.value,filter=statusControl.value||"ALL";
+  const records=inventory.map(r=>({r,d:equipmentDiagnostic(r)}));
+  const matched=records.filter(({r,d})=>{
+    if(requestedLocation==="WAREHOUSE"&&!d.inWarehouse)return false;
+    if(requestedLocation==="OUTSIDE"&&d.inWarehouse)return false;
+    if(type&&norm(r.equipo||"")!==type)return false;
+    if(site&&norm(String(r.sede||"").trim()||"SIN SEDE")!==site)return false;
+    if(query){
+      const hay=norm([r.equipo,r.codigo,r.codigoPadre,r.descripcion,r.marca,r.modelo,r.serie].join(" "));
+      const terms=query.split(/\s+/).filter(Boolean);
+      if(!terms.every(t=>hay.includes(t)))return false;
+    }
+    return true;
+  });
+  const counts={
+    ALL:matched.length,
+    AVAILABLE:matched.filter(x=>x.d.available).length,
+    GOOD:matched.filter(x=>x.d.health==="GOOD").length,
+    DEFICIENT:matched.filter(x=>x.d.health==="DEFICIENT").length,
+    BROKEN:matched.filter(x=>x.d.health==="BROKEN").length,
+    IN_USE:matched.filter(x=>x.d.inUse).length,
+    VERIFY:matched.filter(x=>x.d.pending).length
+  };
+  const cards=[
+    ["ALL","Total", "total"],
+    ["AVAILABLE","Disponibles","good"],
+    ["GOOD","Buen estado","good"],
+    ["DEFICIENT","Deficientes","review"],
+    ["BROKEN","Malogrados","bad"],
+    ["IN_USE","En uso","info"],
+    ["VERIFY","Por verificar","review"]
   ];
-  $("#availableSummary").innerHTML=stats.map(([n,label,style])=>
-    `<div class="availability-stat ${style}"><strong>${n}</strong><span>${label}</span></div>`).join("");
+  $("#availableSummary").innerHTML=cards.map(([id,label,style])=>
+    `<button type="button" class="availability-stat ${style} ${filter===id?"active":""}" data-availability-category="${id}" aria-pressed="${filter===id?"true":"false"}" title="Ver ${esc(label.toLowerCase())}">
+       <strong>${counts[id]}</strong><span>${esc(label)}</span>
+     </button>`).join("");
+  $$("#availableSummary [data-availability-category]").forEach(button=>button.onclick=()=>{
+    statusControl.value=button.dataset.availabilityCategory;
+    renderAvailabilityDashboard();
+  });
+
   const displayed=matched.filter(x=>matchesAvailabilityFilter(x,filter));
-  const headings={
-    AVAILABLE:"Disponibles para asignar",
+  const titleMap={
+    ALL:"Todos los equipos de la selección",
+    AVAILABLE:"Equipos listos para asignación",
     GOOD:"Equipos en buen estado",
     DEFICIENT:"Equipos deficientes",
     BROKEN:"Equipos malogrados",
     IN_USE:"Equipos actualmente en uso",
-    VERIFY:"Equipos pendientes de verificación",
-    ALL:"Todos los equipos"
+    VERIFY:"Equipos pendientes de verificación"
   };
-  $("#availableResultHeading").textContent=headings[filter]||headings.ALL;
+  const locationName=locationNames[requestedLocation]||locationNames.WAREHOUSE;
+  const typeName=type?types.get(type)||type:query?"Equipos buscados":"Todos los equipos";
+  $("#availableResultHeading").textContent=titleMap[filter]||titleMap.ALL;
   $("#availableResultCount").textContent=String(displayed.length);
   $("#availableResultDescription").textContent=
-    `${chosenType?types.get(chosenType):"Todos los tipos"} · ${chosenSite?sites.get(chosenSite):"Todas las sedes"} · ${displayed.length} registro(s)`;
+    `${locationName} · ${typeName} · ${site?sites.get(site)||site:"Todas las sedes"} · ${displayed.length} registro(s)`;
+  const overview=$("#availableScopeDescription");
+  if(overview)overview.textContent=
+    `Se encontraron ${counts.ALL} registro(s) de ${typeName.toLowerCase()} en ${locationName.toLowerCase()}`+
+    `${site?" de "+(sites.get(site)||site):""}${query?" · búsqueda: "+searchControl.value.trim():""}.`;
 
-  const locations=new Map();
+  const byLocation=new Map();
   displayed.forEach(({r})=>{
-    const s=String(r.sede||"").trim()||"SIN SEDE",a=String(r.area||"").trim()||"SIN ÁREA";
-    const key=norm(s)+"|"+norm(a);
-    const group=locations.get(key)||{sede:s,area:a,count:0};
-    group.count++;locations.set(key,group);
+    const sede=String(r.sede||"").trim()||"SIN SEDE";
+    const area=String(r.area||"").trim()||"SIN ÁREA";
+    const key=norm(sede)+"|"+norm(area);
+    const row=byLocation.get(key)||{sede,area,count:0};
+    row.count++;
+    byLocation.set(key,row);
   });
-  $("#availableLocations").innerHTML=[...locations.values()].sort((a,b)=>b.count-a.count||a.sede.localeCompare(b.sede,"es"))
-    .map(g=>`<div class="availability-location"><div><b>${esc(g.sede)}</b><span>${esc(g.area)}</span></div><strong>${g.count}</strong></div>`).join("")
-    ||'<div class="availability-empty-small">No hay equipos en este filtro.</div>';
+  $("#availableLocations").innerHTML=[...byLocation.values()]
+    .sort((a,b)=>b.count-a.count||a.sede.localeCompare(b.sede,"es"))
+    .map(x=>`<div class="availability-location"><div><b>${esc(x.sede)}</b><span>${esc(x.area)}</span></div><strong>${x.count}</strong></div>`).join("")
+    ||'<div class="availability-empty-small">No hay ubicaciones para este filtro.</div>';
 
-  const healthNames={GOOD:"Buen estado",DEFICIENT:"Deficiente",BROKEN:"Malogrado",REVIEW:"Sin verificar"};
+  const healthNames={GOOD:"Buen estado",DEFICIENT:"Deficiente",BROKEN:"Malogrado",REVIEW:"Por verificar"};
   const healthClasses={GOOD:"ok",DEFICIENT:"warn",BROKEN:"bad",REVIEW:"info"};
-  const list=displayed.sort((x,y)=>(x.r.sede||"").localeCompare(y.r.sede||"","es")||
-    (x.r.area||"").localeCompare(y.r.area||"","es")||
-    (x.r.codigo||x.r.id||"").localeCompare(y.r.codigo||y.r.id||"","es"));
-  const rows=list.map(({r,d})=>`<tr>
+  const rows=displayed.sort((a,b)=>
+    String(a.r.sede||"").localeCompare(String(b.r.sede||""),"es")||
+    String(a.r.area||"").localeCompare(String(b.r.area||""),"es")||
+    String(a.r.codigo||a.r.id||"").localeCompare(String(b.r.codigo||b.r.id||""),"es")
+  ).map(({r,d})=>`<tr>
     <td><span class="code">${esc(r.codigo||r.id||"—")}</span>${r.codigoPadre?`<div class="muted">Padre: ${esc(r.codigoPadre)}</div>`:""}</td>
     <td><b>${esc(r.equipo||"Sin tipo")}</b><div class="muted">${esc([r.marca,r.modelo].filter(Boolean).join(" · ")||"Sin marca/modelo")}</div></td>
     <td><b>${esc(r.sede||"Sin sede")}</b><div class="muted">${esc(r.area||"Sin área")}</div></td>
     <td><b>${esc(r.estado||"—")}</b><div class="muted">Condición: ${esc(r.condicion||"—")}</div></td>
-    <td><span class="badge ${healthClasses[d.health]}">${healthNames[d.health]}</span></td>
+    <td><span class="badge ${healthClasses[d.health]}">${esc(healthNames[d.health])}</span></td>
     <td><span class="badge ${d.available?"ok":d.inUse?"info":"warn"}">${d.available?"Disponible":d.inUse?"En uso":"No disponible"}</span>
       ${d.reasons.length?`<div class="muted">${esc(d.reasons.join("; "))}</div>`:""}</td>
-    <td class="availability-diagnosis-cell">${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):"<span class=\"muted\">Sin observaciones registradas</span>"}</td>
-    <td><button type="button" class="btn btn-soft btn-small" data-open="${esc(r.id)}">Ver ficha</button></td>
+    <td class="availability-diagnosis-cell">${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):'<span class="muted">Sin observaciones registradas</span>'}</td>
+    <td><button class="btn btn-soft btn-small" type="button" data-open="${esc(r.id)}">Ver ficha</button></td>
   </tr>`).join("");
   host.innerHTML=`<div class="table-wrap availability-table-wrap"><table>
-    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Verificación / uso / observaciones</th><th>Detalle</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="8" class="availability-table-empty">No hay registros con los filtros seleccionados.</td></tr>'}</tbody>
+    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Verificación / Uso / observaciones</th><th>Detalle</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8" class="availability-table-empty">No existen equipos con estos filtros.</td></tr>'}</tbody>
   </table></div>`;
-  $$("#availableInventoryTable [data-open]").forEach(btn=>btn.onclick=()=>openAsset(btn.dataset.open));
+  $$("#availableInventoryTable [data-open]").forEach(button=>button.onclick=()=>openAsset(button.dataset.open));
 }
-
 async function importExcelDiagnostics(file){
   if(!ensureEditable())return;
   if(!state?.inventory?.length){toast("Primero debe existir un inventario cargado.","error");return;}
@@ -3504,13 +3550,14 @@ function openPerson(key){
     ["#inventorySearch","#siteFilter","#categoryFilter","#statusFilter","#locationFilter"].forEach(sel=>{
       const el=$(sel); if(el) el.addEventListener("input",()=>{page=1;renderInventory()});
     });
+    if($("#availableItemSearch")) $("#availableItemSearch").addEventListener("input",renderAvailabilityDashboard);
     if($("#updateDiagnosticsBtn"))$("#updateDiagnosticsBtn").onclick=()=>$("#diagnosticExcelInput")?.click();
     if($("#diagnosticExcelInput"))$("#diagnosticExcelInput").onchange=async e=>{
       const file=e.target.files?.[0];
       if(file)await importExcelDiagnostics(file);
       e.target.value="";
     };
-    ["availableTypeFilter","availableSiteFilter","availableStatusFilter"].forEach(id=>{
+    ["availableTypeFilter","availableSiteFilter","availableLocationFilter","availableStatusFilter"].forEach(id=>{
       const el=$("#"+id);
       if(el) el.addEventListener("change",renderAvailabilityDashboard);
     });

@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261023-0904" />
+  <link rel="stylesheet" href="styles.css?v=20261023-1030" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -125,7 +125,7 @@
             <article class="panel availability-panel" aria-labelledby="availabilityTitle">
               <div class="panel-head panel-head-row availability-panel-header">
                 <div>
-                  <h3 id="availabilityTitle">Equipos disponibles para asignar</h3>
+                  <h3 id="availabilityTitle">Existencias y disponibilidad por tipo de equipo</h3>
                   <p>Consulta equipos disponibles, malogrados, deficientes, en buen estado o en uso, según Estado, Condición, Verificación / Uso y Observaciones del Excel.</p>
                 </div>
                 <div class="availability-help">
@@ -135,6 +135,14 @@
                 </div>
               </div>
               <div class="availability-controls">
+                <div class="form-field">
+                  <label for="availableLocationFilter">¿Dónde buscar?</label>
+                  <select id="availableLocationFilter" aria-label="Filtrar por almacén o inventario completo">
+                    <option value="WAREHOUSE" selected>Solo Almacén TIC</option>
+                    <option value="OUTSIDE">Fuera de almacén</option>
+                    <option value="ALL">Todo el inventario</option>
+                  </select>
+                </div>
                 <div class="form-field">
                   <label for="availableTypeFilter">Tipo de equipo</label>
                   <select id="availableTypeFilter" aria-label="Seleccionar tipo de equipo"><option value="">Todos los equipos</option></select>
@@ -146,8 +154,8 @@
                 <div class="form-field">
                   <label for="availableStatusFilter">Estado / disponibilidad</label>
                   <select id="availableStatusFilter" aria-label="Seleccionar disponibilidad y estado">
-                    <option value="AVAILABLE" selected>Disponibles para asignar</option>
-                    <option value="ALL">Todos los dispositivos</option>
+                    <option value="AVAILABLE">Disponibles para asignar</option>
+                    <option value="ALL" selected>Todos los dispositivos</option>
                     <option value="GOOD">En buen estado</option>
                     <option value="DEFICIENT">Deficientes / incompletos</option>
                     <option value="BROKEN">Malogrados</option>
@@ -156,9 +164,14 @@
                   </select>
                 </div>
               </div>
+              <div class="availability-item-search">
+                <label for="availableItemSearch">Buscar por nombre o Código TIC</label>
+                <input id="availableItemSearch" type="search" autocomplete="off" placeholder="Ejemplo: MONITOR, BRIX, MOU-000046..." />
+              </div>
+              <div id="availableScopeDescription" class="availability-scope-description" aria-live="polite"></div>
               <div id="availableSummary" class="availability-summary" aria-live="polite"></div>
               <div class="availability-disclaimer">
-                <b>Disponible</b> significa: equipo en almacén, en buen estado según el registro, sin responsable activo, sin uso reportado y sin conflictos. <b>Buen estado</b> también puede incluir equipos ya asignados. Los equipos con fallas documentadas en Verificación / Uso, Observaciones o Condición se cuentan como deficientes o malogrados aunque el campo Estado diga “Operativo”. Las observaciones requieren verificación física para confirmar su vigencia.
+                Los contadores se calculan <b>solo en la ubicación, tipo y sede seleccionados</b>. <b>Total</b> incluye todos los registros de esa selección; <b>disponibles</b> es una parte de los equipos en buen estado (no se suman entre sí). Las fallas descritas en Observaciones o Verificación / Uso prevalecen sobre el estado “Operativo”. Para confirmar disponibilidad real, revisa físicamente los equipos.
               </div>
               <div class="availability-results-header">
                 <div>
@@ -421,6 +434,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20261023-0904"></script>
-  <script src="app.js?v=20261023-0912"></script>
+  <script src="app.js?v=20261023-1030"></script>
 </body>
 </html>

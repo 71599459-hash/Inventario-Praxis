@@ -186,6 +186,26 @@
     return actual;
   }
 
+  async function saveAndVerifyCollaborators(action,expectedMap){
+    await persist(action);
+    if(!cloudMode||!PraxisCloud.configured())return true;
+    const fresh=await PraxisCloud.loadState();
+    if(!fresh?.state||!Array.isArray(fresh.state.inventory))
+      throw new Error("No se pudo comprobar la asignación en Supabase.");
+    const remote=new Map(fresh.state.inventory.map(r=>[String(r.id),r]));
+    state=fresh.state;
+    try{await PraxisDB.set(STATE_KEY,state)}catch(err){console.warn("Caché local no disponible",err)}
+    for(const [id,expected] of expectedMap){
+      const row=remote.get(String(id));
+      if(!row)throw new Error("Un equipo ya no está en inventario: "+id);
+      for(const [key,val] of Object.entries(expected)){
+        if(String(row[key]??"")!==String(val??""))
+          throw new Error("Asignación no confirmada para "+String(row.codigo||id)+" ("+key+").");
+      }
+    }
+    return true;
+  }
+
   function setAssetFormSaving(button,saving){
     if(!button)return;
     button.disabled=saving;
@@ -923,7 +943,8 @@ async function importExcelDiagnostics(file){
     };
   
     $("#saveNewAsset").onclick=async()=>{
-      const alert=$("#formAlert");
+      const alert=$("#formAlert"),button=$("#saveNewAsset");
+      if(button.dataset.busy==="true")return;
       const codeValue=code.value.trim().toUpperCase();
       const equipment=norm($("#nEquipment").value);
       const sede=site.value.trim().toUpperCase();
@@ -957,8 +978,14 @@ async function importExcelDiagnostics(file){
       state.inventory=state.inventory||[];state.inventory.push(record);
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Alta web",codigo:codeValue,equipo:equipment,from:"",to:[sede,areaValue,responsable].filter(Boolean).join(" / "),responsable,observaciones:record.observaciones});
-      await persist("ALTA_EQUIPO");
-      closeModal();page=1;renderAll();toast("Equipo agregado con datos validados.","success");
+      setAssetFormSaving(button,true);
+      try{
+        await saveAndVerifyAsset(record.id,"ALTA_EQUIPO",{
+          codigo:record.codigo,estado:record.estado,sede:record.sede,area:record.area,locationType:record.locationType
+        });
+        closeModal();page=1;renderAll();toast("Equipo creado y comprobado en la base de datos.","success");
+      }catch(err){assetSaveError(err,alert);renderAll();}
+      finally{setAssetFormSaving(button,false);}
     };
   }
   function openAsset(id) {
@@ -1102,6 +1129,7 @@ async function importExcelDiagnostics(file){
   }
   function openResolveConflict(r) {
     if(!ensureEditable()) return;
+    const sourceSnapshot=assetSnapshot(r);
     const candidates=(r.conflictRecords&&r.conflictRecords.length?r.conflictRecords:(r.history||[]).filter(h=>h.sede||h.area||h.responsable))
       .filter((x,i,a)=>a.findIndex(y=>norm([y.sede,y.area,y.responsable].join("|"))===norm([x.sede,x.area,x.responsable].join("|")))===i);
 
@@ -1123,6 +1151,9 @@ async function importExcelDiagnostics(file){
 
     $$("[data-pick-conflict]").forEach(b=>b.onclick=async()=>{
       const x=candidates[Number(b.dataset.pickConflict)];
+      const latest=requireCurrentAsset(r,sourceSnapshot,null);
+      if(!latest){toast("El registro cambió. Vuelve a abrir la ficha.","error");return}
+      r=latest;
       const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Resolución de conflicto",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Ubicación anterior antes de resolver conflicto"});
@@ -1135,7 +1166,13 @@ async function importExcelDiagnostics(file){
       r.needsReview=false;r.conflictLocations=[];r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Resolución de conflicto",codigo:r.codigo,equipo:r.equipo,from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),responsable:r.responsable,observaciones:`Ubicación confirmada desde ${x.source||"Excel"} fila ${x.row||""}`});
-      await persist("RESOLVER_CONFLICTO");closeModal();renderAll();toast("Ubicación confirmada y sincronizada.","success");
+      const expected={sede:r.sede,area:r.area,responsable:r.responsable,dni:r.dni,estado:r.estado,locationType:r.locationType};
+      setAssetFormSaving(b,true);
+      try{
+        await saveAndVerifyAsset(r.id,"RESOLVER_CONFLICTO",expected);
+        closeModal();renderAll();toast("Ubicación confirmada y comprobada.","success");
+      }catch(err){assetSaveError(err,null);renderAll();}
+      finally{setAssetFormSaving(b,false);}
     });
     $("#manualConflict").onclick=()=>openMove(r,false);
   }
@@ -2703,12 +2740,10 @@ function generalSheetItems() {
       .sort((a,b)=>(Number(b.row)||0)-(Number(a.row)||0));
 
     const hasGeneralOrigin=r.source==="General" || generalRows.length>0;
-    if(!hasGeneralOrigin) return;
-
-    // Si este registro de origen General fue modificado desde la web,
-    // respetamos la ubicación/responsable actual guardada por el sistema.
+    // Asignación desde TIC-Almacén a colaborador: debe entrar a la vista vigente de General.
     const latestHistory=(r.history||[])[0]||{};
     const hasWebChange=latestHistory.type==="WEB" || /WEB|COLABORADOR|MOVIMIENTO|EDICI[OÓ]N|RESOLUCI[OÓ]N/i.test(String(latestHistory.source||""));
+    if(!hasGeneralOrigin && !(hasWebChange && r.locationType!=="ALMACEN" && !isWarehouseArea(r.area)))return;
     if(hasWebChange){
       out.push({...r,source:"General"});
       return;
@@ -2875,7 +2910,9 @@ function openEditCollaborator(p){
 
     const oldName=p.name||"";
     const oldDni=p.dni||"";
-    const affected=activeInventory().filter(r=>collaboratorRecordMatches(r,p));
+    const itemIds=new Set((p.items||[]).map(x=>String(x.id)));
+    const affected=activeInventory().filter(r=>itemIds.has(String(r.id)) && !isWarehouseArea(r.area)
+      && collaboratorNameKey(r.responsable||"")===collaboratorNameKey(p.name));
     const firstSite=[...p.sites][0]||affected[0]?.sede||"";
     const firstArea=[...p.areas][0]||affected[0]?.area||"";
 
@@ -2916,7 +2953,13 @@ function openEditCollaborator(p){
       if(r.locationType!=="ALMACEN") r.locationType="ASIGNADO";
     });
 
-    await persist("CAMBIAR_COLABORADOR_RESPONSABLE");
+    const expected=new Map(affected.map(r=>[String(r.id),{responsable:newName,dni:newDni}]));
+    const button=$("#saveCollaboratorProfile");
+    setAssetFormSaving(button,true);
+    try{
+      await saveAndVerifyCollaborators("CAMBIAR_COLABORADOR_RESPONSABLE",expected);
+    }catch(err){assetSaveError(err,alert);renderAll();setAssetFormSaving(button,false);return;}
+    setAssetFormSaving(button,false);
     closeModal();
     renderAll();
     if($("#peopleSearch")){
@@ -2952,7 +2995,9 @@ function openRemoveCollaborator(p){
 
     const oldName=p.name||"";
     const oldDni=p.dni||"";
-    const affected=activeInventory().filter(r=>collaboratorRecordMatches(r,p));
+    const itemIds=new Set((p.items||[]).map(x=>String(x.id)));
+    const affected=activeInventory().filter(r=>itemIds.has(String(r.id)) && !isWarehouseArea(r.area)
+      && collaboratorNameKey(r.responsable||"")===collaboratorNameKey(p.name));
 
     state.collaboratorDirectory=state.collaboratorDirectory||[];
     state.webMovements=state.webMovements||[];
@@ -2989,7 +3034,13 @@ function openRemoveCollaborator(p){
       if(r.locationType==="ASIGNADO") r.locationType="SEDE";
     });
 
-    await persist("QUITAR_COLABORADOR");
+    const expected=new Map(affected.map(r=>[String(r.id),{responsable:"",dni:""}]));
+    const button=$("#confirmRemoveCollaborator");
+    setAssetFormSaving(button,true);
+    try{
+      await saveAndVerifyCollaborators("QUITAR_COLABORADOR",expected);
+    }catch(err){assetSaveError(err,null);setAssetFormSaving(button,false);return;}
+    setAssetFormSaving(button,false);
     closeModal();
     if($("#peopleSearch")) $("#peopleSearch").value="";
     renderAll();
@@ -3493,11 +3544,20 @@ function openCollaboratorAssignment(prefillKey="") {
       });
     });
 
+    const expected=new Map(records.map(({r})=>[String(r.id),{
+      responsable:r.responsable,dni:r.dni,sede:r.sede,area:r.area,locationType:r.locationType
+    }]));
+    const button=$("#saveCollaboratorAssignment");
+    setAssetFormSaving(button,true);
     try{
-      await persist(records.length ? "ASIGNAR_EQUIPOS_COLABORADOR" : "ALTA_COLABORADOR");
-    }catch(_){
+      await saveAndVerifyCollaborators(records.length ? "ASIGNAR_EQUIPOS_COLABORADOR" : "ALTA_COLABORADOR",expected);
+    }catch(err){
+      assetSaveError(err,alert);
+      renderAll();
+      setAssetFormSaving(button,false);
       return;
     }
+    setAssetFormSaving(button,false);
 
     closeModal();
     renderAll();

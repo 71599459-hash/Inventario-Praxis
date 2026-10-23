@@ -223,8 +223,9 @@ function equipmentDiagnostic(r){
   const activeUsage=/LO ESTA USANDO|LA ESTA USANDO|EN USO (?:POR|ACTUALMENTE)|SIENDO USAD[OA]|ACTUALMENTE (?:EN USO|USA|UTILIZA)|USO TEMPORAL|PRESTAD[OA] A|ASIGNAD[OA] A|EN PRESTAMO|LO UTILIZA/.test(notes);
   const reserved=/RESERVAD[OA]|LISTO PARA (?:LA )?VENTA|DESTINAD[OA] A VENTA|EN VENTA|PARA VENTA/.test(notes);
   const inUse=(r?.locationType==="ASIGNADO"&&!inWarehouse)||activeUsage;
-  const available=inWarehouse && areaActual.includes("ALMAC") && !namedOwner && !inUse && !reserved && !r?.needsReview && health==="GOOD";
-  const pending=!available && !inUse && (health==="REVIEW"||Boolean(r?.needsReview)||(inWarehouse&&(namedOwner||reserved))||(health==="GOOD"&&!inWarehouse));
+  const warehouseReview=warehouseReviewEvidence(r);
+  const available=inWarehouse && warehouseReview.status==="FOUND" && !namedOwner && !inUse && !reserved && !r?.needsReview && health==="GOOD";
+  const pending=!available && !inUse && (health==="REVIEW"||Boolean(r?.needsReview)||(inWarehouse&&(namedOwner||reserved))||(health==="GOOD"&&!inWarehouse)||warehouseReview.status==="PENDING_REVIEW");
   const reasons=[];
   if(critical || brokenStatus) reasons.push("Falla crítica o equipo malogrado");
   else if(health==="DEFICIENT") reasons.push("Fallas parciales o componentes faltantes");
@@ -233,27 +234,51 @@ function equipmentDiagnostic(r){
   if(activeUsage) reasons.push("Observaciones indican uso actual");
   if(reserved) reasons.push("Reservado para venta u otro destino");
   if(r?.needsReview) reasons.push("Ubicación pendiente de conciliar");
+  if(warehouseReview.status==="NOT_FOUND") reasons.push("No encontrado en revisión: sin fechas desde mayo de 2026");
+  if(warehouseReview.status==="PENDING_REVIEW") reasons.push("Sector con revisión aún pendiente de completar");
   if(health==="GOOD" && !inWarehouse && !inUse) reasons.push("Sin constancia de disponibilidad en almacén");
-  return {health,inWarehouse,namedOwner,inUse,available,pending,reserved,reasons,notes:diagnosticNotes(r)};
+  return {health,inWarehouse,namedOwner,inUse,available,pending,reserved,reasons,notes:diagnosticNotes(r),warehouseReview};
 }
 
-function physicalReviewDate(r){
-  const val=String(r?.diagnosticoExcel?.fechaI||r?.fechaI||"").trim();
-  let year=0;
-  const serial=Number(val);
-  if(/^\d{4,5}(?:\.\d+)?$/.test(val) && serial>=25000 && serial<=70000){
-    year=new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000).getUTCFullYear();
-  }else{
-    let m=val.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-    if(m){year=Number(m[3]);}
-    else{
-      m=val.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
-      if(m)year=Number(m[1]);
+function warehouseReviewEvidence(r){
+  const data=r?.diagnosticoExcel||{};
+  const names=[["fechaA","Fecha (A)"],["fechaE","Fecha (E)"],["fechaI","Fecha (I)"]];
+  const today=Date.now();
+  const may2026=Date.UTC(2026,4,1);
+  const parseDate=raw=>{
+    const text=String(raw??"").trim();
+    if(!text)return null;
+    let y,m,d,match;
+    if(/^\d{4,5}(?:\.\d+)?$/.test(text)){
+      const n=Number(text);
+      if(n<25000||n>70000)return null;
+      const dt=new Date(Date.UTC(1899,11,30)+Math.floor(n)*86400000);
+      return {ms:dt.getTime(),label:`${String(dt.getUTCDate()).padStart(2,"0")}/${String(dt.getUTCMonth()+1).padStart(2,"0")}/${dt.getUTCFullYear()}`};
     }
-  }
-  return {value:val,year,year2026:year===2026};
+    match=text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if(match){d=Number(match[1]);m=Number(match[2]);y=Number(match[3]);}
+    else{
+      match=text.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+      if(!match)return null;
+      y=Number(match[1]);m=Number(match[2]);d=Number(match[3]);
+    }
+    const ms=Date.UTC(y,m-1,d),date=new Date(ms);
+    if(y<1990||y>2100||date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d)return null;
+    return {ms,label:`${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`};
+  };
+  const dates=names.map(([key,name])=>{
+    const raw=Object.prototype.hasOwnProperty.call(data,key)?data[key]:r?.[key];
+    return {key,name,raw:String(raw??"").trim(),parsed:parseDate(raw)};
+  });
+  const found=dates.filter(x=>x.parsed&&x.parsed.ms>=may2026&&x.parsed.ms<=today)
+    .sort((a,b)=>b.parsed.ms-a.parsed.ms);
+  const area=norm(r?.area||"");
+  const warehouse=area.includes("ALMAC") || (!area && r?.locationType==="ALMACEN");
+  const pending=norm(r?.sede||"").includes("ESTRELLAS") ||
+    /\bALMAC(?:E|É)N(?:\s*(?:NRO|Nº|NO|NUMERO|#))?\s*[34]\b/.test(area);
+  const status=!warehouse?"OUTSIDE":found.length?"FOUND":pending?"PENDING_REVIEW":"NOT_FOUND";
+  return {status,dates,latest:found[0]||null,hasRecentDate:found.length>0};
 }
-
 function matchesAvailabilityFilter(x,filter){
   if(filter==="AVAILABLE")return x.d.available;
   if(filter==="GOOD")return x.d.health==="GOOD";
@@ -261,7 +286,9 @@ function matchesAvailabilityFilter(x,filter){
   if(filter==="BROKEN")return x.d.health==="BROKEN";
   if(filter==="IN_USE")return x.d.inUse;
   if(filter==="VERIFY")return x.d.pending;
-  if(filter==="FOUND_2026")return x.d.inWarehouse && physicalReviewDate(x.r).year2026;
+  if(filter==="FOUND")return x.d.warehouseReview.status==="FOUND";
+  if(filter==="NOT_FOUND")return x.d.warehouseReview.status==="NOT_FOUND";
+  if(filter==="PENDING_REVIEW")return x.d.warehouseReview.status==="PENDING_REVIEW";
   return true;
 }
 
@@ -317,7 +344,9 @@ function renderAvailabilityDashboard(){
     BROKEN:matched.filter(x=>x.d.health==="BROKEN").length,
     IN_USE:matched.filter(x=>x.d.inUse).length,
     VERIFY:matched.filter(x=>x.d.pending).length,
-    FOUND_2026:matched.filter(x=>x.d.inWarehouse && physicalReviewDate(x.r).year2026).length
+    FOUND:matched.filter(x=>x.d.warehouseReview.status==="FOUND").length,
+    NOT_FOUND:matched.filter(x=>x.d.warehouseReview.status==="NOT_FOUND").length,
+    PENDING_REVIEW:matched.filter(x=>x.d.warehouseReview.status==="PENDING_REVIEW").length
   };
   const cards=[
     ["ALL","Total", "total"],
@@ -327,7 +356,9 @@ function renderAvailabilityDashboard(){
     ["BROKEN","Malogrados","bad"],
     ["IN_USE","En uso","info"],
     ["VERIFY","Por verificar","review"],
-    ["FOUND_2026","Fecha (I) 2026","info"]
+    ["FOUND","Encontrados 2026","info"],
+    ["NOT_FOUND","No encontrados","bad"],
+    ["PENDING_REVIEW","Revisión pendiente","review"]
   ];
   $("#availableSummary").innerHTML=cards.map(([id,label,style])=>
     `<button type="button" class="availability-stat ${style} ${filter===id?"active":""}" data-availability-category="${id}" aria-pressed="${filter===id?"true":"false"}" title="Ver ${esc(label.toLowerCase())}">
@@ -347,7 +378,9 @@ function renderAvailabilityDashboard(){
     BROKEN:"Equipos malogrados",
     IN_USE:"Equipos actualmente en uso",
     VERIFY:"Equipos pendientes de verificación",
-    FOUND_2026:"Registrados con Fecha (I) de 2026 en almacén"
+    FOUND:"Encontrados físicamente en almacén desde mayo de 2026",
+    NOT_FOUND:"Sin hallazgo registrado en revisión 2026",
+    PENDING_REVIEW:"Equipos en sectores pendientes de revisión física"
   };
   const locationName=locationNames[requestedLocation]||locationNames.WAREHOUSE;
   const typeName=type?types.get(type)||type:query?"Equipos buscados":"Todos los equipos";
@@ -388,13 +421,18 @@ function renderAvailabilityDashboard(){
     <td><span class="badge ${healthClasses[d.health]}">${esc(healthNames[d.health])}</span></td>
     <td><span class="badge ${d.available?"ok":d.inUse?"info":"warn"}">${d.available?"Disponible":d.inUse?"En uso":"No disponible"}</span>
       ${d.reasons.length?`<div class="muted">${esc(d.reasons.join("; "))}</div>`:""}</td>
-    <td><b>${esc(physicalReviewDate(r).value||"Sin fecha")}</b>
-      <div class="muted">${physicalReviewDate(r).year2026?"Registro 2026 · contrastar revisión":"Sin fecha (I) de 2026"}</div></td>
+    <td class="availability-review-cell">
+      <span class="badge ${d.warehouseReview.status==="FOUND"?"ok":d.warehouseReview.status==="NOT_FOUND"?"bad":"warn"}">
+        ${d.warehouseReview.status==="FOUND"?"ENCONTRADO":d.warehouseReview.status==="NOT_FOUND"?"NO ENCONTRADO":d.warehouseReview.status==="PENDING_REVIEW"?"REVISIÓN PENDIENTE":"NO APLICA"}
+      </span>
+      ${d.warehouseReview.latest?`<div class="muted">Hallazgo: ${esc(d.warehouseReview.latest.parsed.label)}</div>`:""}
+      ${d.warehouseReview.dates.map(x=>`<div class="availability-review-date"><b>${esc(x.name)}:</b> ${esc(x.raw||"—")}</div>`).join("")}
+    </td>
     <td class="availability-diagnosis-cell">${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):'<span class="muted">Sin observaciones registradas</span>'}</td>
     <td><button class="btn btn-soft btn-small" type="button" data-open="${esc(r.id)}">Ver ficha</button></td>
   </tr>`).join("");
   host.innerHTML=`<div class="table-wrap availability-table-wrap"><table>
-    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Fecha (I) / hallazgo</th><th>Verificación / Uso / observaciones</th><th>Detalle</th></tr></thead>
+    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Ubicación física (revisión 2026) / Fecha (A), (E), (I)</th><th>Verificación / Uso / observaciones</th><th>Detalle</th></tr></thead>
     <tbody>${rows||'<tr><td colspan="9" class="availability-table-empty">No existen equipos con estos filtros.</td></tr>'}</tbody>
   </table></div>`;
   $$("#availableInventoryTable [data-open]").forEach(button=>button.onclick=()=>openAsset(button.dataset.open));
@@ -435,16 +473,17 @@ async function importExcelDiagnostics(file){
         usadoPor:String(chosen.usadoPor||"").trim(),
         observaciones:String(chosen.observaciones||"").trim(),
         notaAdicional:String(chosen.notaAdicional||"").trim(),
+        fechaA:String(chosen.fechaA||"").trim(),
+        fechaE:String(chosen.fechaE||"").trim(),
         fechaI:String(chosen.fechaI||"").trim()
       };
-      if(!Object.values(data).some(Boolean)){omitted++;continue;}
       const prior=current.diagnosticoExcel||{};
       const isSame=Object.keys(data).every(k=>String(prior[k]||"")===data[k]);
       if(isSame){unchanged++;continue;}
       changes.push({record:current,data});
     }
     if(!changes.length){toast(`Sin nuevos diagnósticos para aplicar. ${unchanged} ya coincidían; ${omitted} sin coincidencia segura.`);return;}
-    if(!confirm(`Se encontraron ${changes.length} diagnósticos de Excel que coinciden con Código TIC y ubicación actual. Se actualizarán SOLO las observaciones y Fecha (I) de revisión, sin alterar responsables, movimientos, códigos, estados ni equipos. ${omitted} registros ambiguos o sin observaciones quedarán sin cambios. ¿Aplicar?`))return;
+    if(!confirm(`Se encontraron ${changes.length} diagnósticos de Excel que coinciden con Código TIC y ubicación actual. Se actualizarán SOLO las observaciones y las tres fechas (A), (E), (I) de revisión, sin alterar responsables, movimientos, códigos, estados ni equipos. ${omitted} registros ambiguos o sin observaciones quedarán sin cambios. ¿Aplicar?`))return;
     changes.forEach(({record,data})=>{
       record.diagnosticoExcel={...data,origenArchivo:file.name,actualizado:new Date().toISOString()};
       updated++;

@@ -664,3 +664,12 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .availability-summary{grid-template-columns:repeat(8,minmax(106px,1fr))}
 @media(max-width:1100px){.availability-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:580px){.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Evidencias físicas en almacén: tres fechas de revisión */
+.availability-review-cell{min-width:190px;vertical-align:top}
+.availability-review-cell .badge{display:inline-flex;margin-bottom:6px}
+.availability-review-date{font-size:9px;line-height:1.5;color:#58718a}
+.availability-review-date b{color:#2c536e}
+.availability-summary{grid-template-columns:repeat(11,minmax(100px,1fr))}
+@media(max-width:1150px){.availability-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:580px){.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}

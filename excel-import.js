@@ -197,6 +197,7 @@ const PraxisExcel = (() => {
         responsable:x.responsable, dni:x.dni, estado:x.estado,
         condicion:x.condicion, situacion:x.situacion,
         fecha:x.fechaI || x.fechaE || x.fechaA || "",
+        fechaA:x.fechaA||"", fechaE:x.fechaE||"", fechaI:x.fechaI||"",
         observaciones:x.observaciones || "", usadoPor:x.usadoPor || "", notaAdicional:x.notaAdicional || ""
       }));
       r.history = historyByCode.get(code) || [];

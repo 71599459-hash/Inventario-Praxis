@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261023-1638" />
+  <link rel="stylesheet" href="styles.css?v=20261023-1718" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -152,18 +152,30 @@
                   <select id="availableSiteFilter" aria-label="Seleccionar sede"><option value="">Todas las sedes</option></select>
                 </div>
                 <div class="form-field">
+                  <label for="availableReviewYear">Año de hallazgo</label>
+                  <select id="availableReviewYear" aria-label="Seleccionar año de hallazgo">
+                    <option value="2026" selected>2026 · desde mayo</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="availableReviewResult">Revisión física</label>
+                  <select id="availableReviewResult" aria-label="Resultado de revisión física">
+                    <option value="FOUND" selected>Solo encontrados</option>
+                    <option value="NOT_FOUND">Sin hallazgo registrado</option>
+                    <option value="PENDING_REVIEW">Revisión pendiente</option>
+                    <option value="ALL">Todos los registros</option>
+                  </select>
+                </div>
+                <div class="form-field">
                   <label for="availableStatusFilter">Estado / disponibilidad</label>
                   <select id="availableStatusFilter" aria-label="Seleccionar disponibilidad y estado">
-                    <option value="AVAILABLE">Disponibles para asignar</option>
-                    <option value="ALL" selected>Todos los dispositivos</option>
+                    <option value="AVAILABLE">Disponibles encontrados 2026</option>
+                    <option value="ALL" selected>Todos los estados</option>
                     <option value="GOOD">En buen estado</option>
                     <option value="DEFICIENT">Deficientes / incompletos</option>
                     <option value="BROKEN">Malogrados</option>
                     <option value="IN_USE">Actualmente en uso</option>
                     <option value="VERIFY">Pendientes de verificación</option>
-                    <option value="FOUND">Encontrados desde mayo 2026</option>
-                    <option value="NOT_FOUND">Sin hallazgo (no encontrados)</option>
-                    <option value="PENDING_REVIEW">Sectores pendientes de revisión</option>
                   </select>
                 </div>
               </div>
@@ -172,9 +184,11 @@
                 <input id="availableItemSearch" type="search" autocomplete="off" placeholder="Ejemplo: MONITOR, BRIX, MOU-000046..." />
               </div>
               <div id="availableScopeDescription" class="availability-scope-description" aria-live="polite"></div>
-              <div id="availableSummary" class="availability-summary" aria-live="polite"></div>
+              <div id="availableReviewSummary" class="availability-review-summary" aria-live="polite"></div>
+                            <div id="availableSummary" class="availability-summary" aria-live="polite"></div>
+              <div id="availableYearNotice" class="availability-year-notice" role="status" hidden></div>
               <div class="availability-disclaimer">
-                Los contadores se calculan <b>solo en la ubicación, tipo y sede seleccionados</b>. <b>Total</b> incluye todos los registros de esa selección; <b>disponibles</b> es una parte de los equipos en buen estado (no se suman entre sí). La <b>Fecha (A), (E) o (I) desde el 01/05/2026</b> significa <b>encontrado en almacén</b>. Si no aparece ninguna fecha reciente, se considera <b>no encontrado</b> en sectores revisados; en Estrellas y almacenes 3 y 4, se deja como <b>revisión pendiente</b> para evitar falsos faltantes. Las fallas descritas en Observaciones o Verificación / Uso prevalecen sobre el estado “Operativo”. Para confirmar disponibilidad real, revisa físicamente los equipos.
+                Primero se selecciona <b>año y resultado de revisión física</b>; después se calculan los totales y estados <b>solo de los equipos que corresponden</b>. El conteo disponible requiere hallazgo desde mayo de 2026 y buen estado; los registros históricos no cuentan como disponibles actuales. La <b>Fecha (A), (E) o (I) desde el 01/05/2026</b> significa <b>encontrado en almacén</b>. Si no aparece ninguna fecha reciente, se considera <b>no encontrado</b> en sectores revisados; en Estrellas y almacenes 3 y 4, se deja como <b>revisión pendiente</b> para evitar falsos faltantes. Las fallas descritas en Observaciones o Verificación / Uso prevalecen sobre el estado “Operativo”. Para confirmar disponibilidad real, revisa físicamente los equipos.
               </div>
               <div class="availability-review-notice">
                 <strong><span aria-hidden="true">ℹ</span> Revisión física 2026</strong>
@@ -184,7 +198,7 @@
               </div>
               <div class="availability-results-header">
                 <div>
-                  <h4 id="availableResultHeading">Disponibles para asignación</h4>
+                  <h4 id="availableResultHeading">Equipos encontrados durante la revisión</h4>
                   <p id="availableResultDescription">Selecciona el tipo de equipo y la sede.</p>
                 </div>
                 <div class="availability-selected-total"><strong id="availableResultCount">0</strong><span>equipos</span></div>
@@ -443,6 +457,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20261023-1638"></script>
-  <script src="app.js?v=20261023-1638"></script>
+  <script src="app.js?v=20261023-1718"></script>
 </body>
 </html>

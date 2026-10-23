@@ -673,3 +673,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .availability-summary{grid-template-columns:repeat(11,minmax(100px,1fr))}
 @media(max-width:1150px){.availability-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:580px){.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Consulta por año y por hallazgo físico en almacén */
+.availability-controls{grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+.availability-review-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}
+.availability-overview-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#f4f8fc;border:1px solid #dbe7f2;border-radius:9px}
+.availability-overview-item span{font-size:10px;color:#466680}
+.availability-overview-item b{font-size:20px;color:#234d74}
+.availability-overview-item.found{background:#edf9f2;border-color:#bfebd2}
+.availability-overview-item.found b{color:#08754a}
+.availability-year-notice{border:1px solid #f2dca3;background:#fffbec;border-radius:9px;color:#7b5713;font-size:11px;line-height:1.5;padding:10px 12px;margin:10px 0}
+.availability-year-notice[hidden]{display:none}
+.availability-summary{grid-template-columns:repeat(7,minmax(100px,1fr));}
+@media(max-width:1100px){.availability-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.availability-review-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.availability-controls{grid-template-columns:1fr}.availability-review-summary{grid-template-columns:1fr}.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -882,6 +882,11 @@ async function importExcelDiagnostics(file){
     const people=responsiblePeopleForLocation(site,area,keepCurrent?currentName:"");
     let html=`<option value="">Sin responsable</option>`;
     html+=people.map(p=>`<option value="${esc(p.key)}" ${currentKey&&collaboratorNameKey(p.name)===currentKey?"selected":""}>${esc(p.name)}${p.dni?` · DNI ${esc(p.dni)}`:""}</option>`).join("");
+    // Un responsable importado puede no estar en el directorio. No se debe borrar
+    // accidentalmente al editar otra característica como "Estado".
+    if(keepCurrent && currentKey && !people.some(p=>collaboratorNameKey(p.name)===currentKey)){
+      html+=`<option value="__retain_existing__" selected>${esc(currentName)} · conservar responsable actual</option>`;
+    }
     return html;
   }
   
@@ -1062,6 +1067,7 @@ async function importExcelDiagnostics(file){
       if(keepCurrent){
         const p=collaborators().find(x=>collaboratorNameKey(x.name)===collaboratorNameKey(r.responsable||""));
         if(p){person.value=p.key;dni.value=p.dni||r.dni||""}
+        else if(r.responsable){person.value="__retain_existing__";dni.value=r.dni||"";}
       }else{
         dni.value="";
       }
@@ -1092,8 +1098,8 @@ async function importExcelDiagnostics(file){
   
       const warehouse=isWarehouseArea(areaValue);
       const selectedPerson=warehouse?null:collaborators().find(x=>x.key===person.value);
-      const newResp=selectedPerson?.name||"";
-      const newDni=selectedPerson?.dni||"";
+      const newResp=selectedPerson?.name||(person.value==="__retain_existing__"?r.responsable:"");
+      const newDni=selectedPerson?.dni||(person.value==="__retain_existing__"?r.dni:"");
       const before=[r.sede,r.area,r.responsable].filter(Boolean).join(" / ");
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Edición web",fecha:today(),sede:r.sede,area:r.area,responsable:r.responsable,estado:r.estado,observaciones:"Ficha anterior antes de edición"});
@@ -1120,7 +1126,7 @@ async function importExcelDiagnostics(file){
     setAssetFormSaving(button,true);
     try{
       await saveAndVerifyAsset(r.id,"EDITAR_FICHA",expected);
-      closeModal();renderAll();toast("Ficha guardada y verificada en Supabase.","success");
+      closeModal();renderAll();openAsset(r.id);toast("Ficha guardada y verificada en Supabase.","success");
     }catch(err){
       assetSaveError(err,alert);
       renderAll();
@@ -1249,10 +1255,16 @@ async function importExcelDiagnostics(file){
       if(!newSite||!newArea){alert.className="alert error";alert.textContent="Selecciona la nueva sede y el área / aula.";return}
       const warehouse=toWarehouse||isWarehouseArea(newArea);
       const selectedPerson=warehouse?null:collaborators().find(x=>x.key===person.value);
-      const newResp=selectedPerson?.name||"";
-      const newDni=selectedPerson?.dni||"";
+      const newResp=selectedPerson?.name||(person.value==="__retain_existing__"&&!warehouse?r.responsable:"");
+      const newDni=selectedPerson?.dni||(person.value==="__retain_existing__"&&!warehouse?r.dni:"");
       const motivo=$("#mObs").value.trim();
       const oldSite=r.sede,oldArea=r.area,oldResp=r.responsable;
+      if(norm(oldSite)===norm(newSite) && norm(oldArea)===norm(newArea) &&
+         norm(oldResp)===norm(newResp) && !motivo){
+        alert.className="alert info";
+        alert.textContent="El equipo ya está en esta misma sede, área y responsable. Selecciona un destino diferente o indica el motivo del movimiento.";
+        return;
+      }
   
       r.history=r.history||[];
       r.history.unshift({type:"WEB",source:"Movimiento web",fecha:today(),sede:oldSite,area:oldArea,responsable:oldResp,estado:r.estado,observaciones:`Ubicación anterior. ${motivo}`});
@@ -1265,7 +1277,7 @@ async function importExcelDiagnostics(file){
     setAssetFormSaving(button,true);
     try{
       await saveAndVerifyAsset(r.id,"MOVIMIENTO_EQUIPO",expected);
-      closeModal();renderAll();
+      closeModal();renderAll();openAsset(r.id);
       toast(warehouse?"Equipo enviado al almacén y verificado en Supabase.":"Movimiento confirmado en Supabase.","success");
     }catch(err){
       assetSaveError(err,alert);renderAll();

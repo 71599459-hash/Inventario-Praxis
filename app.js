@@ -308,9 +308,16 @@ function equipmentDiagnostic(r){
   const owner=norm(r?.responsable||"");
   const generic=!owner||/^(ALMACEN|TIC ALMACEN|SIN RESPONSABLE|SIN ASIGNAR|NO ASIGNADO|NINGUNO|N\/A|NA|S\/R)$/.test(owner);
   const namedOwner=!generic || Boolean(String(r?.dni||"").trim());
-  const activeUsage=/LO ESTA USANDO|LA ESTA USANDO|EN USO (?:POR|ACTUALMENTE)|SIENDO USAD[OA]|ACTUALMENTE (?:EN USO|USA|UTILIZA)|USO TEMPORAL|PRESTAD[OA] A|ASIGNAD[OA] A|EN PRESTAMO|LO UTILIZA/.test(notes);
+  const usageFromOldNotes=/LO ESTA USANDO|LA ESTA USANDO|EN USO (?:POR|ACTUALMENTE)|SIENDO USAD[OA]|ACTUALMENTE (?:EN USO|USA|UTILIZA)|USO TEMPORAL|PRESTAD[OA] A|ASIGNAD[OA] A|EN PRESTAMO|LO UTILIZA/.test(notes);
+  // El registro actual y una transferencia WEB posterior prevalecen sobre una
+  // anotación de uso del Excel antiguo. No borrar observaciones del historial.
+  const recordedWarehouseTransfer=inWarehouse && r?.locationType==="ALMACEN" && !namedOwner &&
+    (r?.history||[]).some(h=>h?.type==="WEB" &&
+      /MOVIMIENTO WEB|RESOLUCION DE CONFLICTO|ASIGNACION DE COLABORADOR|TRANSFERENCIA DE COLABORADOR|RETIRO DE COLABORADOR/.test(norm(h?.source||"")));
+  const historicalUsage=Boolean(usageFromOldNotes && recordedWarehouseTransfer);
+  const activeUsage=Boolean(usageFromOldNotes && !historicalUsage);
   const reserved=/RESERVAD[OA]|LISTO PARA (?:LA )?VENTA|DESTINAD[OA] A VENTA|EN VENTA|PARA VENTA/.test(notes);
-  const inUse=(r?.locationType==="ASIGNADO"&&!inWarehouse)||activeUsage;
+  const inUse=(!inWarehouse&&(r?.locationType==="ASIGNADO"||namedOwner))||activeUsage;
   const warehouseReview=warehouseReviewEvidence(r);
   const available=inWarehouse && warehouseReview.status==="FOUND" && !namedOwner && !inUse && !reserved && !r?.needsReview && health==="GOOD";
   const pending=!available && !inUse && (health==="REVIEW"||Boolean(r?.needsReview)||(inWarehouse&&(namedOwner||reserved))||(health==="GOOD"&&!inWarehouse)||warehouseReview.status==="PENDING_REVIEW");
@@ -325,7 +332,7 @@ function equipmentDiagnostic(r){
   if(warehouseReview.status==="NOT_FOUND") reasons.push("No encontrado en revisión: sin fechas desde mayo de 2026");
   if(warehouseReview.status==="PENDING_REVIEW") reasons.push("Sector con revisión aún pendiente de completar");
   if(health==="GOOD" && !inWarehouse && !inUse) reasons.push("Sin constancia de disponibilidad en almacén");
-  return {health,inWarehouse,namedOwner,inUse,available,pending,reserved,reasons,notes:diagnosticNotes(r),warehouseReview};
+  return {health,inWarehouse,namedOwner,inUse,historicalUsage,available,pending,reserved,reasons,notes:diagnosticNotes(r),warehouseReview};
 }
 
 function warehouseReviewEvidence(r, year=2026){
@@ -548,7 +555,10 @@ function renderAvailabilityDashboard(){
         <div class="muted">${latest?`Fecha encontrada: ${esc(latest.parsed.label)} · ${esc(latest.name)}`:"Sin fecha de hallazgo para este año"}</div>
         ${review.dates.map(x=>`<div class="availability-review-date"><b>${esc(x.name)}:</b> ${esc(x.raw||"—")}</div>`).join("")}
       </td>
-      <td class="availability-diagnosis-cell">${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):'<span class="muted">Sin observaciones registradas</span>'}</td>
+      <td class="availability-diagnosis-cell">
+        ${d.historicalUsage?'<div class="availability-archived-usage"><b>USO ANTERIOR</b> · Esta anotación pertenece al historial. El movimiento web posterior confirma el retorno al almacén.</div>':""}
+        ${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):'<span class="muted">Sin observaciones registradas</span>'}
+      </td>
       <td><button class="btn btn-soft btn-small" type="button" data-open="${esc(r.id)}">Ver ficha</button></td>
     </tr>`;
   }).join("");
@@ -1004,6 +1014,8 @@ async function importExcelDiagnostics(file){
     const history=(r.history||[]).map(h=>`<div class="history-item"><b>${esc(h.source||h.type||"Movimiento")}</b> · ${esc([h.sede,h.area].filter(Boolean).join(" / "))}${h.responsable?` · ${esc(h.responsable)}`:""}<br><small>${esc(h.fecha||"")} ${esc(h.observaciones||"")}</small></div>`).join("");
     const duplicateNotice=r.duplicateSources>1?`<div class="alert info"><b>Código consolidado:</b> este código aparecía ${r.duplicateSources} veces en las hojas activas del Excel. El sistema lo mantiene como un solo registro.</div>`:"";
     const conflictNotice=r.needsReview?`<div class="alert error"><b>Revisar ubicación actual:</b> el mismo Código TIC aparece asociado a más de una sede, área o responsable en el Excel. Verifica el historial antes de confirmar una transferencia.<br><span class="muted">${esc((r.conflictLocations||[]).join(" · "))}</span></div>`:"";
+    const oldUsageNotice=equipmentDiagnostic(r).historicalUsage
+      ?'<div class="alert info"><b>Uso anterior:</b> la observación del Excel indica una asignación antigua. Según el movimiento web registrado, el equipo está ahora en almacén y sin responsable. La observación se conserva como historial.</div>':"";
     const actionButtons = canEdit() ? `
       <div class="modal-actions">
         <button id="editAsset" class="btn btn-soft">Editar ficha</button>
@@ -1014,6 +1026,7 @@ async function importExcelDiagnostics(file){
     showModal(`${r.codigo||r.id} · ${r.equipo||"Equipo"}`,`${r.sede||""} ${r.area?"/ "+r.area:""}`,`
       ${duplicateNotice}
       ${conflictNotice}
+      ${oldUsageNotice}
       <div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-field"><span>${esc(k)}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
       ${actionButtons}
       <h4 class="section-title">Historial del Código TIC</h4>${history||`<div class="muted">Sin historial adicional.</div>`}

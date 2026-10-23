@@ -687,3 +687,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .availability-summary{grid-template-columns:repeat(7,minmax(100px,1fr));}
 @media(max-width:1100px){.availability-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.availability-review-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:590px){.availability-controls{grid-template-columns:1fr}.availability-review-summary{grid-template-columns:1fr}.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Distingue uso antiguo del Excel frente a devoluciones posteriores registradas en web. */
+.availability-archived-usage{padding:7px 9px;margin-bottom:6px;border:1px solid #cfe1f1;
+background:#f1f7ff;border-radius:7px;color:#426783;font-size:10px;line-height:1.45}
+.availability-archived-usage b{color:#145b99}

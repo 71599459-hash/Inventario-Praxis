@@ -24,9 +24,10 @@
 
   const statusClass = s => {
     const x = norm(s);
-    if (x.includes("OPERAT")) return "ok";
-    if (x.includes("MANT") || x.includes("REGULAR")) return "warn";
-    if (x.includes("AVERI") || x.includes("BAJA") || x.includes("MALO")) return "bad";
+    // "NO OPERATIVO" contiene el texto OPERATIVO, pero no es un equipo operativo.
+    if (/NO OPERAT|INOPERAT|MALOGR|AVERI|BAJA|MALO|QUEMAD|DEFECTU/.test(x)) return "bad";
+    if (/MANT|REGULAR|DEFICI|REPAR/.test(x)) return "warn";
+    if (/OPERAT|FUNCION|BUEN|NUEVO|EXCELENTE/.test(x)) return "ok";
     return "info";
   };
 
@@ -132,6 +133,73 @@
   function activeInventory() {
     return state?.inventory || [];
   }
+
+  const ASSET_FIELDS=[
+    "codigoPadre","equipo","descripcion","marca","modelo","serie",
+    "estado","condicion","situacion","sede","area","responsable","dni",
+    "observaciones","locationType"
+  ];
+
+  function assetSnapshot(record){
+    return ASSET_FIELDS.map(k=>[k,String(record?.[k]??"")]);
+  }
+
+  function assetRecordIsCurrent(opened,snapshot){
+    const live=activeInventory().find(x=>String(x.id)===String(opened?.id));
+    return Boolean(live && JSON.stringify(assetSnapshot(live))===JSON.stringify(snapshot));
+  }
+
+  function requireCurrentAsset(opened,snapshot,alert){
+    const live=activeInventory().find(x=>String(x.id)===String(opened?.id));
+    if(!live){
+      if(alert){alert.className="alert error";alert.textContent="Este equipo ya no se encuentra en el inventario actual. Actualiza la página antes de continuar.";}
+      return null;
+    }
+    if(JSON.stringify(assetSnapshot(live))!==JSON.stringify(snapshot)){
+      if(alert){alert.className="alert error";alert.textContent="El equipo cambió mientras esta ventana estaba abierta. Cierra con la X, vuelve a abrir su ficha y verifica los datos actuales antes de guardar.";}
+      return null;
+    }
+    return live;
+  }
+
+  async function saveAndVerifyAsset(assetId,action,expected){
+    // Escribe en PostgreSQL (o IndexedDB si se utiliza el modo local).
+    await persist(action);
+    if(!cloudMode || !PraxisCloud.configured()){
+      const local=activeInventory().find(x=>String(x.id)===String(assetId));
+      if(!local)throw new Error("El equipo ya no figura en el inventario.");
+      for(const [field,value] of Object.entries(expected)){
+        if(String(local[field]??"")!==String(value??""))throw new Error("El cambio no se reflejó en el inventario local.");
+      }
+      return local;
+    }
+    // Comprobación independiente: recuperar el registro REAL después del RPC.
+    const fresh=await PraxisCloud.loadState();
+    if(!fresh?.state || !Array.isArray(fresh.state.inventory))
+      throw new Error("No se pudo comprobar el guardado en la base de datos. Comprueba tu conexión.");
+    const actual=fresh.state.inventory.find(x=>String(x.id)===String(assetId));
+    state=fresh.state;
+    try{await PraxisDB.set(STATE_KEY,state)}catch(err){console.warn("No se pudo actualizar la caché",err)}
+    if(!actual)throw new Error("No se encontró el equipo después de guardar. Revisa la sincronización.");
+    const mismatches=Object.entries(expected).filter(([key,value])=>String(actual[key]??"")!==String(value??""));
+    if(mismatches.length)throw new Error("El servidor devolvió datos diferentes en: "+mismatches.map(x=>x[0]).join(", ")+". Vuelve a revisar la ficha.");
+    return actual;
+  }
+
+  function setAssetFormSaving(button,saving){
+    if(!button)return;
+    button.disabled=saving;
+    button.dataset.busy=saving?"true":"false";
+    if(saving){button.dataset.originalLabel=button.textContent;button.textContent="Guardando y comprobando...";}
+    else if(button.dataset.originalLabel){button.textContent=button.dataset.originalLabel;}
+  }
+
+  function assetSaveError(err,alert){
+    console.error("Error al guardar cambio del inventario",err);
+    if(alert){alert.className="alert error";alert.textContent=(err?.message||"No se pudo guardar ni confirmar el cambio en la base de datos.");}
+    toast("El cambio no pudo confirmarse. Revisa el mensaje del formulario.","error");
+  }
+
 
   function collaborators() {
     const map = new Map();
@@ -622,7 +690,7 @@ async function importExcelDiagnostics(file){
   }
 
   function renderGeneral() {
-    const rows=generalSheetItems();
+    const rows=generalSheetItems().filter(r=>!isWarehouseArea(r.area) && r.locationType!=="ALMACEN");
     $("#generalTable").innerHTML=tableHtml(rows,false); wireTables();
   }
 
@@ -928,6 +996,7 @@ async function importExcelDiagnostics(file){
 
   function openEditAsset(r){
     if(!ensureEditable()) return;
+    const sourceSnapshot=assetSnapshot(r);
     const equipmentValues=structuredValues("equipo",r.equipo,[]);
     const statusValues=structuredValues("estado",r.estado,["OPERATIVO","USADO","MANTENIMIENTO","MALOGRADO","BAJA"]);
     const conditionValues=structuredValues("condicion",r.condicion,[]);
@@ -981,7 +1050,11 @@ async function importExcelDiagnostics(file){
     person.onchange=()=>{const p=collaborators().find(x=>x.key===person.value);dni.value=p?.dni||""};
   
     $("#saveEditAsset").onclick=async()=>{
-      const alert=$("#formAlert");
+      const alert=$("#formAlert"), button=$("#saveEditAsset");
+      if(button.dataset.busy==="true")return;
+      const live=requireCurrentAsset(r,sourceSnapshot,alert);
+      if(!live)return;
+      r=live;
       const equipment=norm($("#eEquipment").value);
       if(!equipment){alert.className="alert error";alert.textContent="Equipo / Material es obligatorio.";return}
       const sede=site.value.trim().toUpperCase(), areaValue=area.value.trim();
@@ -1016,7 +1089,15 @@ async function importExcelDiagnostics(file){
   
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Edición web",codigo:r.codigo,equipo:r.equipo,from:before,to:[r.sede,r.area,r.responsable].filter(Boolean).join(" / "),responsable:r.responsable,observaciones:"Actualización de ficha con listas controladas"});
-      await persist("EDITAR_FICHA");closeModal();renderAll();toast("Ficha actualizada con datos validados.","success");
+      const expected=Object.fromEntries(ASSET_FIELDS.map(field=>[field,r[field]]));
+    setAssetFormSaving(button,true);
+    try{
+      await saveAndVerifyAsset(r.id,"EDITAR_FICHA",expected);
+      closeModal();renderAll();toast("Ficha guardada y verificada en Supabase.","success");
+    }catch(err){
+      assetSaveError(err,alert);
+      renderAll();
+    }finally{setAssetFormSaving(button,false);}
     };
   }
   function openResolveConflict(r) {
@@ -1061,6 +1142,7 @@ async function importExcelDiagnostics(file){
 
   function openMove(r,toWarehouse=false){
     if(!ensureEditable()) return;
+    const sourceSnapshot=assetSnapshot(r);
     const sites=siteValues(r.sede);
     const initialArea=toWarehouse?"TIC / ALMACÉN":r.area||"";
   
@@ -1099,8 +1181,14 @@ async function importExcelDiagnostics(file){
   
     const refreshAreas=(keepCurrent=false)=>{
       if(toWarehouse){
-        area.innerHTML=`<option value="TIC / ALMACÉN" selected>TIC / ALMACÉN</option>`;
-        area.disabled=true;
+        const opts=areaValuesForSite(site.value,"").filter(v=>isWarehouseArea(v));
+        if(!opts.length)opts.push("TIC / ALMACÉN");
+        // No convertir automáticamente ALMACÉN 3 / ALMACÉN 4 en un almacén genérico.
+        const sameSite=norm(site.value)===norm(r.sede);
+        const preferred=sameSite && isWarehouseArea(r.area) && opts.some(v=>norm(v)===norm(r.area))
+          ?r.area:opts.find(v=>norm(v)==="TIC / ALMACEN")||opts[0];
+        area.innerHTML=optionList(opts,preferred,"Seleccione almacén");
+        area.disabled=false;
         refreshPeople(false);
         return;
       }
@@ -1115,7 +1203,11 @@ async function importExcelDiagnostics(file){
     area.onchange=()=>refreshPeople(false);
   
     $("#saveMove").onclick=async()=>{
-      const alert=$("#formAlert");
+      const alert=$("#formAlert"), button=$("#saveMove");
+      if(button.dataset.busy==="true")return;
+      const live=requireCurrentAsset(r,sourceSnapshot,alert);
+      if(!live)return;
+      r=live;
       const newSite=site.value.trim().toUpperCase(), newArea=area.value.trim();
       if(!newSite||!newArea){alert.className="alert error";alert.textContent="Selecciona la nueva sede y el área / aula.";return}
       const warehouse=toWarehouse||isWarehouseArea(newArea);
@@ -1132,7 +1224,15 @@ async function importExcelDiagnostics(file){
       r.needsReview=false;r.conflictLocations=[];r.conflictRecords=[];
       state.webMovements=state.webMovements||[];
       state.webMovements.unshift({id:crypto.randomUUID(),fecha:today(),source:"Movimiento web",codigo:r.codigo,equipo:r.equipo,from:[oldSite,oldArea,oldResp].filter(Boolean).join(" / "),to:[newSite,newArea,newResp].filter(Boolean).join(" / "),responsable:newResp,motivo,observaciones:motivo});
-      await persist("MOVIMIENTO_EQUIPO");closeModal();renderAll();toast(warehouse?"Equipo enviado al almacén sin responsable.":"Movimiento guardado con sede, área y responsable validados.","success");
+      const expected={sede:r.sede,area:r.area,responsable:r.responsable,dni:r.dni,locationType:r.locationType};
+    setAssetFormSaving(button,true);
+    try{
+      await saveAndVerifyAsset(r.id,"MOVIMIENTO_EQUIPO",expected);
+      closeModal();renderAll();
+      toast(warehouse?"Equipo enviado al almacén y verificado en Supabase.":"Movimiento confirmado en Supabase.","success");
+    }catch(err){
+      assetSaveError(err,alert);renderAll();
+    }finally{setAssetFormSaving(button,false);}
     };
   }
   function openPerson(key) {
@@ -2608,7 +2708,7 @@ function generalSheetItems() {
     // Si este registro de origen General fue modificado desde la web,
     // respetamos la ubicación/responsable actual guardada por el sistema.
     const latestHistory=(r.history||[])[0]||{};
-    const hasWebChange=latestHistory.type==="WEB" || /WEB|COLABORADOR/i.test(String(latestHistory.source||""));
+    const hasWebChange=latestHistory.type==="WEB" || /WEB|COLABORADOR|MOVIMIENTO|EDICI[OÓ]N|RESOLUCI[OÓ]N/i.test(String(latestHistory.source||""));
     if(hasWebChange){
       out.push({...r,source:"General"});
       return;

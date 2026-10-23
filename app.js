@@ -350,7 +350,16 @@ async function importExcelDiagnostics(file){
       const candidates=[imp,...(imp.conflictRecords||[])];
       const suitable=candidates.filter(c=>c && sameLocation(current,c) &&
         (!current.source||!c.source||norm(current.source)===norm(c.source)));
-      let chosen=suitable.length===1?suitable[0]:null;
+      // buildState incluye el mismo registro tanto en el maestro como en conflictRecords.
+      // Deduplicarlo por hoja/fila evita omitir todos los equipos con Código TIC.
+      const seen=new Set();
+      const unique=suitable.filter(c=>{
+        const key=[norm(c.source),String(c.row||""),norm(c.sede),norm(c.area)].join("|");
+        if(seen.has(key))return false;
+        seen.add(key);
+        return true;
+      });
+      let chosen=unique.length===1?unique[0]:null;
       if(!chosen && !current.codigo && candidates.length===1 && sameLocation(current,imp))chosen=imp;
       if(!chosen){omitted++;continue;}
       const data={

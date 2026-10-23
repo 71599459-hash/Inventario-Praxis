@@ -623,3 +623,22 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .availability-table-empty{text-align:center;color:#5d778c;padding:25px}
 @media(max-width:900px){.availability-controls{grid-template-columns:1fr 1fr}.availability-controls .form-field:last-child{grid-column:1/-1}}
 @media(max-width:550px){.availability-controls{grid-template-columns:1fr}.availability-controls .form-field:last-child{grid-column:auto}.availability-summary{grid-template-columns:1fr}.availability-panel-header{gap:8px}}
+
+/* Diagnósticos de equipos desde Excel: resumen por condición y disponibilidad */
+.availability-help{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.availability-summary{display:grid;grid-template-columns:repeat(7,minmax(108px,1fr));gap:8px;overflow-x:auto;padding-bottom:3px}
+.availability-stat{flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-height:70px}
+.availability-stat strong{font-size:23px}
+.availability-stat span{font-size:10px}
+.availability-stat.total{background:#f1f7ff}
+.availability-stat.total strong{color:#1467c8}
+.availability-stat.bad{background:#fff5f6;border-color:#f1cbd3}
+.availability-stat.bad strong{color:#af283e}
+.availability-stat.info{background:#f1f6ff;border-color:#d2e2f8}
+.availability-stat.info strong{color:#225dae}
+.availability-diagnosis-cell{min-width:220px;max-width:360px;white-space:normal;overflow-wrap:anywhere}
+.availability-note{padding:4px 0;line-height:1.45;border-bottom:1px solid #e7eef6}
+.availability-note:last-child{border-bottom:0}
+.availability-table-wrap table{min-width:1320px}
+@media(max-width:1100px){.availability-summary{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:580px){.availability-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.availability-help{align-items:stretch}.availability-help .btn{width:100%}}

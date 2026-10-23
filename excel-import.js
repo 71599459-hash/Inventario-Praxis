@@ -53,8 +53,10 @@ const PraxisExcel = (() => {
       caracteristicas:find("Características técnicas","Caracteristicas tecnicas"), marca:find("Marca"),
       modelo:find("Modelo"), serie:find("Serie o Código","Serie o Codigo"), puertos:find("Puertos"),
       color:find("Color"), estado:find("Estado"), condicion:find("Condición","Condicion"),
-      situacion:find("Situación","Situacion"), usadoPor:find("USADO POR"),
-      observaciones:find("Observaciones"), revision:find("REVISIÓN","REVISION")
+      situacion:find("Situación","Situacion"), usadoPor:find("Verificación / Uso","Verificacion / Uso","Verificación/Uso","Verificacion/Uso","USADO POR"),
+      observaciones:find("Observaciones","Observación","Observacion"),
+      notaAdicional:find("Observaciones 1","Observación 1","Observacion 1","Columna 1","Column1"),
+      revision:find("REVISIÓN","REVISION")
     };
   }
 
@@ -81,7 +83,8 @@ const PraxisExcel = (() => {
         marca:norm(get("marca")), modelo:get("modelo"), serie:get("serie"),
         puertos:get("puertos"), color:get("color"), estado:norm(get("estado")),
         condicion:norm(get("condicion")), situacion:norm(get("situacion")),
-        usadoPor:get("usadoPor"), observaciones:get("observaciones") || get("revision")
+        usadoPor:get("usadoPor"), notaAdicional:get("notaAdicional"),
+        observaciones:get("observaciones") || get("revision")
       };
       const hasData = [rec.codigo,rec.codigoPadre,rec.equipo,rec.sede,rec.area,rec.responsable,rec.marca,rec.modelo,rec.serie].some(Boolean);
       if (hasData) out.push(rec);
@@ -194,7 +197,7 @@ const PraxisExcel = (() => {
         responsable:x.responsable, dni:x.dni, estado:x.estado,
         condicion:x.condicion, situacion:x.situacion,
         fecha:x.fechaI || x.fechaE || x.fechaA || "",
-        observaciones:x.observaciones || ""
+        observaciones:x.observaciones || "", usadoPor:x.usadoPor || "", notaAdicional:x.notaAdicional || ""
       }));
       r.history = historyByCode.get(code) || [];
       inventory.push(r);

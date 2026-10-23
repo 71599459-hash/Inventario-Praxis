@@ -237,6 +237,23 @@ function equipmentDiagnostic(r){
   return {health,inWarehouse,namedOwner,inUse,available,pending,reserved,reasons,notes:diagnosticNotes(r)};
 }
 
+function physicalReviewDate(r){
+  const val=String(r?.diagnosticoExcel?.fechaI||r?.fechaI||"").trim();
+  let year=0;
+  const serial=Number(val);
+  if(/^\d{4,5}(?:\.\d+)?$/.test(val) && serial>=25000 && serial<=70000){
+    year=new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000).getUTCFullYear();
+  }else{
+    let m=val.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if(m){year=Number(m[3]);}
+    else{
+      m=val.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+      if(m)year=Number(m[1]);
+    }
+  }
+  return {value:val,year,year2026:year===2026};
+}
+
 function matchesAvailabilityFilter(x,filter){
   if(filter==="AVAILABLE")return x.d.available;
   if(filter==="GOOD")return x.d.health==="GOOD";
@@ -244,6 +261,7 @@ function matchesAvailabilityFilter(x,filter){
   if(filter==="BROKEN")return x.d.health==="BROKEN";
   if(filter==="IN_USE")return x.d.inUse;
   if(filter==="VERIFY")return x.d.pending;
+  if(filter==="FOUND_2026")return x.d.inWarehouse && physicalReviewDate(x.r).year2026;
   return true;
 }
 
@@ -298,7 +316,8 @@ function renderAvailabilityDashboard(){
     DEFICIENT:matched.filter(x=>x.d.health==="DEFICIENT").length,
     BROKEN:matched.filter(x=>x.d.health==="BROKEN").length,
     IN_USE:matched.filter(x=>x.d.inUse).length,
-    VERIFY:matched.filter(x=>x.d.pending).length
+    VERIFY:matched.filter(x=>x.d.pending).length,
+    FOUND_2026:matched.filter(x=>x.d.inWarehouse && physicalReviewDate(x.r).year2026).length
   };
   const cards=[
     ["ALL","Total", "total"],
@@ -307,7 +326,8 @@ function renderAvailabilityDashboard(){
     ["DEFICIENT","Deficientes","review"],
     ["BROKEN","Malogrados","bad"],
     ["IN_USE","En uso","info"],
-    ["VERIFY","Por verificar","review"]
+    ["VERIFY","Por verificar","review"],
+    ["FOUND_2026","Fecha (I) 2026","info"]
   ];
   $("#availableSummary").innerHTML=cards.map(([id,label,style])=>
     `<button type="button" class="availability-stat ${style} ${filter===id?"active":""}" data-availability-category="${id}" aria-pressed="${filter===id?"true":"false"}" title="Ver ${esc(label.toLowerCase())}">
@@ -326,7 +346,8 @@ function renderAvailabilityDashboard(){
     DEFICIENT:"Equipos deficientes",
     BROKEN:"Equipos malogrados",
     IN_USE:"Equipos actualmente en uso",
-    VERIFY:"Equipos pendientes de verificación"
+    VERIFY:"Equipos pendientes de verificación",
+    FOUND_2026:"Registrados con Fecha (I) de 2026 en almacén"
   };
   const locationName=locationNames[requestedLocation]||locationNames.WAREHOUSE;
   const typeName=type?types.get(type)||type:query?"Equipos buscados":"Todos los equipos";
@@ -367,12 +388,14 @@ function renderAvailabilityDashboard(){
     <td><span class="badge ${healthClasses[d.health]}">${esc(healthNames[d.health])}</span></td>
     <td><span class="badge ${d.available?"ok":d.inUse?"info":"warn"}">${d.available?"Disponible":d.inUse?"En uso":"No disponible"}</span>
       ${d.reasons.length?`<div class="muted">${esc(d.reasons.join("; "))}</div>`:""}</td>
+    <td><b>${esc(physicalReviewDate(r).value||"Sin fecha")}</b>
+      <div class="muted">${physicalReviewDate(r).year2026?"Registro 2026 · contrastar revisión":"Sin fecha (I) de 2026"}</div></td>
     <td class="availability-diagnosis-cell">${d.notes.length?d.notes.map(note=>`<div class="availability-note">${esc(note)}</div>`).join(""):'<span class="muted">Sin observaciones registradas</span>'}</td>
     <td><button class="btn btn-soft btn-small" type="button" data-open="${esc(r.id)}">Ver ficha</button></td>
   </tr>`).join("");
   host.innerHTML=`<div class="table-wrap availability-table-wrap"><table>
-    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Verificación / Uso / observaciones</th><th>Detalle</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="8" class="availability-table-empty">No existen equipos con estos filtros.</td></tr>'}</tbody>
+    <thead><tr><th>Código TIC</th><th>Equipo / marca</th><th>Sede / ubicación</th><th>Estado / condición</th><th>Diagnóstico</th><th>Disponibilidad</th><th>Fecha (I) / hallazgo</th><th>Verificación / Uso / observaciones</th><th>Detalle</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="9" class="availability-table-empty">No existen equipos con estos filtros.</td></tr>'}</tbody>
   </table></div>`;
   $$("#availableInventoryTable [data-open]").forEach(button=>button.onclick=()=>openAsset(button.dataset.open));
 }
@@ -411,7 +434,8 @@ async function importExcelDiagnostics(file){
       const data={
         usadoPor:String(chosen.usadoPor||"").trim(),
         observaciones:String(chosen.observaciones||"").trim(),
-        notaAdicional:String(chosen.notaAdicional||"").trim()
+        notaAdicional:String(chosen.notaAdicional||"").trim(),
+        fechaI:String(chosen.fechaI||"").trim()
       };
       if(!Object.values(data).some(Boolean)){omitted++;continue;}
       const prior=current.diagnosticoExcel||{};
@@ -420,14 +444,14 @@ async function importExcelDiagnostics(file){
       changes.push({record:current,data});
     }
     if(!changes.length){toast(`Sin nuevos diagnósticos para aplicar. ${unchanged} ya coincidían; ${omitted} sin coincidencia segura.`);return;}
-    if(!confirm(`Se encontraron ${changes.length} diagnósticos de Excel que coinciden con Código TIC y ubicación actual. Se actualizarán SOLO las notas de diagnóstico, sin alterar responsables, movimientos, códigos, estados ni equipos. ${omitted} registros ambiguos o sin observaciones quedarán sin cambios. ¿Aplicar?`))return;
+    if(!confirm(`Se encontraron ${changes.length} diagnósticos de Excel que coinciden con Código TIC y ubicación actual. Se actualizarán SOLO las observaciones y Fecha (I) de revisión, sin alterar responsables, movimientos, códigos, estados ni equipos. ${omitted} registros ambiguos o sin observaciones quedarán sin cambios. ¿Aplicar?`))return;
     changes.forEach(({record,data})=>{
       record.diagnosticoExcel={...data,origenArchivo:file.name,actualizado:new Date().toISOString()};
       updated++;
     });
     await persist("IMPORTAR_DIAGNOSTICOS_EXCEL");
     renderAll();
-    toast(`${updated} diagnósticos vinculados sin cambiar el inventario maestro.`,"success");
+    toast(`${updated} diagnósticos y fechas vinculados sin cambiar el inventario maestro.`,"success");
   }catch(err){
     console.error("Importación de diagnóstico",err);
     toast(err?.message||"No se pudo importar el diagnóstico del Excel.","error");

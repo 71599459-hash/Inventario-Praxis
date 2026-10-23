@@ -13,7 +13,7 @@
   <link rel="shortcut icon" type="image/png" href="./praxis-p-favicon-v7.png" />
   <link rel="apple-touch-icon" href="./praxis-p-favicon-v7.png" />
   <link rel="manifest" href="manifest.webmanifest?v=20261001-7" />
-  <link rel="stylesheet" href="styles.css?v=20261023-1030" />
+  <link rel="stylesheet" href="styles.css?v=20261023-1516" />
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -171,7 +171,13 @@
               <div id="availableScopeDescription" class="availability-scope-description" aria-live="polite"></div>
               <div id="availableSummary" class="availability-summary" aria-live="polite"></div>
               <div class="availability-disclaimer">
-                Los contadores se calculan <b>solo en la ubicación, tipo y sede seleccionados</b>. <b>Total</b> incluye todos los registros de esa selección; <b>disponibles</b> es una parte de los equipos en buen estado (no se suman entre sí). Las fallas descritas en Observaciones o Verificación / Uso prevalecen sobre el estado “Operativo”. Para confirmar disponibilidad real, revisa físicamente los equipos.
+                Los contadores se calculan <b>solo en la ubicación, tipo y sede seleccionados</b>. <b>Total</b> incluye todos los registros de esa selección; <b>disponibles</b> es una parte de los equipos en buen estado (no se suman entre sí). <b>Fecha (I) 2026</b> ayuda a identificar los hallazgos documentados, pero no confirma por sí sola que la revisión física esté cerrada. Las fallas descritas en Observaciones o Verificación / Uso prevalecen sobre el estado “Operativo”. Para confirmar disponibilidad real, revisa físicamente los equipos.
+              </div>
+              <div class="availability-review-notice">
+                <strong><span aria-hidden="true">ℹ</span> Revisión física 2026</strong>
+                Según el avance indicado, quedan sectores por completar en <b>Estrellas y almacenes 3 y 4</b>.
+                Los colores rosado y amarillo del Excel sirven como referencia visual de revisión; no equivalen a estado operativo ni disponibilidad.
+                La clasificación por colores requiere importar y comprobar las marcas del archivo Excel actualizado.
               </div>
               <div class="availability-results-header">
                 <div>
@@ -434,6 +440,6 @@
   <script src="cloud.js?v=20260930-2142"></script>
   <script src="storage.js?v=20260930-2045"></script>
   <script src="excel-import.js?v=20261023-0904"></script>
-  <script src="app.js?v=20261023-1030"></script>
+  <script src="app.js?v=20261023-1516"></script>
 </body>
 </html>

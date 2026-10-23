@@ -2052,8 +2052,55 @@ async function importExcelDiagnostics(file){
       next.cargoDocuments=state?.cargoDocuments||[];
       next.cargoOverrides=state?.cargoOverrides||{};
       next.collaboratorDirectory=state?.collaboratorDirectory||[];
-      state=next;await persist("IMPORTAR_EXCEL");page=1;renderAll();setView("dashboard");
-      toast(`Inventario importado: ${state.inventory.length} registros maestros.`,"success");
+      // Las filas recién importadas del Excel NO deben borrar movimientos/ediciones web.
+      next.webMovements=state?.webMovements||[];
+      const previousRows=state?.inventory||[];
+      const previousByCode=new Map(previousRows.filter(r=>r.codigo).map(r=>[norm(r.codigo),r]));
+      const matchedOld=new Set();
+      let preserved=0;
+      const editedKeys=[
+        "codigoPadre","equipo","descripcion","detalle","caracteristicas","marca","modelo","serie",
+        "estado","condicion","situacion","sede","area","responsable","dni","observaciones",
+        "locationType","needsReview","conflictLocations","conflictRecords","source","history","diagnosticoExcel"
+      ];
+      const wasModifiedOnWeb=r=>r.source==="Web"||(r.history||[]).some(h=>h.type==="WEB"||
+        /EDICI[OÓ]N WEB|MOVIMIENTO WEB|ALTA WEB|ASIGNACI[OÓ]N|TRANSFERENCIA|CAMBIO DE COLABORADOR|RETIRO DE COLABORADOR|RESOLUCI[OÓ]N/i.test(String(h.source||"")));
+      next.inventory=next.inventory.map(incoming=>{
+        const old=incoming.codigo?previousByCode.get(norm(incoming.codigo)):previousRows.find(r=>
+          !r.codigo && String(r.id)===String(incoming.id) &&
+          norm(r.equipo)===norm(incoming.equipo) && norm(r.source)===norm(incoming.source)
+        );
+        if(!old)return incoming;
+        matchedOld.add(old.id);
+        if(!wasModifiedOnWeb(old)){
+          // Diagnósticos verificados se conservan aun cuando Excel no tenga esa columna.
+          if(old.diagnosticoExcel)incoming.diagnosticoExcel=old.diagnosticoExcel;
+          return incoming;
+        }
+        preserved++;
+        const merged={...incoming};
+        editedKeys.forEach(k=>{if(Object.prototype.hasOwnProperty.call(old,k))merged[k]=old[k]});
+        return merged;
+      });
+      // Un alta web tampoco se pierde si todavía no está registrada en el Excel.
+      const additional=previousRows.filter(r=>r.source==="Web"&&wasModifiedOnWeb(r)&&!matchedOld.has(r.id));
+      const incomingIds=new Set(next.inventory.map(r=>String(r.id)));
+      additional.forEach(r=>{if(!incomingIds.has(String(r.id)))next.inventory.push(r)});
+      state=next;
+      await persist("IMPORTAR_EXCEL");
+      // Verificar que el servidor conservó la cantidad y movimientos del estado resultante.
+      if(cloudMode&&PraxisCloud.configured()){
+        const latest=await PraxisCloud.loadState();
+        if(!latest?.state||!Array.isArray(latest.state.inventory))throw new Error("La importación no pudo verificarse en Supabase.");
+        const expectedCount=next.inventory.length;
+        const expectedMovements=next.webMovements.length;
+        state=latest.state;
+        if(state.inventory.length!==expectedCount||(state.webMovements||[]).length!==expectedMovements)
+          throw new Error("La importación recibida del servidor no coincide con los registros o movimientos esperados.");
+        try{await PraxisDB.set(STATE_KEY,state)}catch(err){console.warn("Caché no disponible",err)}
+      }
+      page=1;renderAll();setView("dashboard");
+      toast(`Inventario importado: ${state.inventory.length} registros. Se conservaron ${preserved} registros editados en web y ${additional.length} altas web.`,"success");
     }catch(err){console.error(err);toast(err.message||"No se pudo importar el Excel.","error")}
   }
 
